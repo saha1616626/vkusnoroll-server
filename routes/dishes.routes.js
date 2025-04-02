@@ -5,5 +5,8 @@ const router = express.Router();
 const dishesController = require('../controllers/dishes.controller'); // Контроллер для блюд
 
 router.get('/', dishesController.getAllDishes);
+router.get('/:id', dishesController.getDishById);
+router.post('/', dishesController.createDish);
+router.put('/:id', dishesController.updateDish);
 
 module.exports = router;

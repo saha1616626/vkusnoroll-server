@@ -10,7 +10,7 @@ const app = express();
 
 // Настройка CORS для разных клиентов
 const allowedOrigins = [
-    'http://localhost:3003', // Admin
+    'http://localhost:3000', // Admin
     'http://localhost:3001', // Manager
     'http://localhost:3002'  // Restaurant
 ];
