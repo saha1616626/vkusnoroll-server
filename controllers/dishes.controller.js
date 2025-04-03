@@ -26,7 +26,20 @@ exports.getDishById = async (req, res) => {
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Блюдо не найдено' });
         }
-        res.json(rows[0]);  // Успешно
+        // res.json(rows[0]);  // Успешно
+
+
+        // Достаем запись о блюде
+        const dish = rows[0];
+
+        // Если есть Buffer с изображением, конвертируем в base64
+        if (dish.image && Buffer.isBuffer(dish.image)) {
+            dish.image = `data:image/png;base64,${dish.image.toString('base64')}`;
+        }
+
+        res.json(dish);
+
+
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Internal server error' });
@@ -36,6 +49,10 @@ exports.getDishById = async (req, res) => {
 // Создание нового блюда
 exports.createDish = async (req, res) => {
     try {
+        // Конвертация изображения в чистый base64
+        const base64Data = req.body.image;
+        const buffer = Buffer.from(base64Data, 'base64');
+
         const { rows } = await pool.query(createDishQuery, [
             req.body.name,
             req.body.description,
@@ -53,7 +70,7 @@ exports.createDish = async (req, res) => {
             req.body.volume,
             req.body.price,
             req.body.isArchived,
-            req.body.image
+            req.body.image = buffer
         ]);
 
         res.status(201).json(rows[0]); // Успешно

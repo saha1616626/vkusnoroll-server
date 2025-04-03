@@ -8,6 +8,10 @@ const categoriesRoutes = require('./routes/categories.routes');
 
 const app = express();
 
+// Устанавливаем лимит HTTP-запроса
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
 // Настройка CORS для разных клиентов
 const allowedOrigins = [
     'http://localhost:3000', // Admin
