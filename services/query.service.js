@@ -12,7 +12,8 @@ exports.getDishesQuery = `
 SELECT
     d.id, 
     d.name, 
-    d.description, 
+    d.description,
+    d."categoryId",
     c.name as category,
     d.price,
     d."isNutritionalValue",
@@ -41,11 +42,8 @@ exports.getDishByIdQuery = `
 // Добавляем блюдо
 exports.createDishQuery = `
   INSERT INTO dish (
-    name, description, "categoryId", price,
-    "isNutritionalValue", calories, fats, squirrels, carbohydrates,
-    "isWeight", weight, "isQuantitySet", quantity,
-    "isVolume", volume, "isArchived", image
-  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    name, description, "categoryId", "isNutritionalValue", calories, fats, squirrels, carbohydrates, "isWeight", weight, "isQuantitySet", quantity, "isVolume", volume, price, "isArchived", image
+  ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
   RETURNING *
 `;
 

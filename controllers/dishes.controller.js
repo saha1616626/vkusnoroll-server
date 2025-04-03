@@ -40,7 +40,6 @@ exports.createDish = async (req, res) => {
             req.body.name,
             req.body.description,
             req.body.categoryId,
-            req.body.price,
             req.body.isNutritionalValue,
             req.body.calories,
             req.body.fats,
@@ -52,6 +51,7 @@ exports.createDish = async (req, res) => {
             req.body.quantity,
             req.body.isVolume,
             req.body.volume,
+            req.body.price,
             req.body.isArchived,
             req.body.image
         ]);
@@ -66,34 +66,34 @@ exports.createDish = async (req, res) => {
 // Обновление блюда
 exports.updateDish = async (req, res) => {
     try {
-      const { rows } = await pool.query(updateDishQuery, [
-        req.body.name,
-        req.body.description,
-        req.body.categoryId,
-        req.body.price,
-        req.body.isNutritionalValue,
-        req.body.calories,
-        req.body.fats,
-        req.body.squirrels,
-        req.body.carbohydrates,
-        req.body.isWeight,
-        req.body.weight,
-        req.body.isQuantitySet,
-        req.body.quantity,
-        req.body.isVolume,
-        req.body.volume,
-        req.body.isArchived,
-        req.body.image,
-        req.params.id
-      ]);
-  
-      if (rows.length === 0) {
-        return res.status(404).json({ error: 'Блюдо не найдено' });
-      }
-      
-      res.json(rows[0]);  // Успешно
+        const { rows } = await pool.query(updateDishQuery, [
+            req.body.name,
+            req.body.description,
+            req.body.categoryId,
+            req.body.isNutritionalValue,
+            req.body.calories,
+            req.body.fats,
+            req.body.squirrels,
+            req.body.carbohydrates,
+            req.body.isWeight,
+            req.body.weight,
+            req.body.isQuantitySet,
+            req.body.quantity,
+            req.body.isVolume,
+            req.body.volume,
+            req.body.price,
+            req.body.isArchived,
+            req.body.image,
+            req.params.id
+        ]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Блюдо не найдено' });
+        }
+
+        res.json(rows[0]);  // Успешно
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: 'Internal server error' });
+        console.error(err);
+        res.status(500).json({ error: 'Internal server error' });
     }
-  };
+};
