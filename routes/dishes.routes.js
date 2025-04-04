@@ -8,5 +8,7 @@ router.get('/', dishesController.getAllDishes);
 router.get('/:id', dishesController.getDishById);
 router.post('/', dishesController.createDish);
 router.put('/:id', dishesController.updateDish);
+router.delete('/', dishesController.deleteDishes);
+router.put('/', dishesController.archiveDishes);
 
 module.exports = router;

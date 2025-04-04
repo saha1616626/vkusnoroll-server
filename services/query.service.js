@@ -53,20 +53,35 @@ exports.updateDishQuery = `
     name = $1,
     description = $2,
     "categoryId" = $3,
-    price = $4,
-    "isNutritionalValue" = $5,
-    calories = $6,
-    fats = $7,
-    squirrels = $8,
-    carbohydrates = $9,
-    "isWeight" = $10,
-    weight = $11,
-    "isQuantitySet" = $12,
-    quantity = $13,
-    "isVolume" = $14,
-    volume = $15,
+    "isNutritionalValue" = $4,
+    calories = $5,
+    fats = $6,
+    squirrels = $7,
+    carbohydrates = $8,
+    "isWeight" = $9,
+    weight = $10,
+    "isQuantitySet" = $11,
+    quantity = $12,
+    "isVolume" = $13,
+    volume = $14,
+    price = $15,
     "isArchived" = $16,
     image = $17
   WHERE id = $18
+  RETURNING *
+`;
+
+// Удаление списка блюд
+exports.deleteDishesQuery = `
+  DELETE FROM dish
+  WHERE id = ANY($1::integer[])
+  RETURNING *
+`;
+
+// Архивировать/разархивировать блюда
+exports.archiveDishesQuery = `
+  UPDATE dish 
+  SET "isArchived" = $2
+  WHERE id = ANY($1::integer[])
   RETURNING *
 `;
