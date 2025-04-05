@@ -1,13 +1,14 @@
 // Контроллер для категорий
 
 const pool = require('../config/db'); // Подключение к БД
-const { 
+const {
     getCategoriesQuery,
     getСategoryByIdQuery,
     createСategoryQuery,
     updateСategoryQuery,
     deleteCategoriesQuery,
-    archiveCategoriesQuery  
+    archiveCategoriesQuery,
+    checkCategoryUsageQuery
 } = require('../services/query.service');
 
 // Получение полного списка категорий
@@ -83,7 +84,8 @@ exports.updateСategory = async (req, res) => {
 exports.deleteCategories = async (req, res) => {
     try {
         const { ids } = req.body;
-        
+
+        // Валидация
         if (!ids || !Array.isArray(ids) || ids.length === 0) { // Проверка на существование данных, на массив, на длину массива
             return res.status(400).json({ error: 'Некорректный список ID' });
         }
@@ -91,8 +93,37 @@ exports.deleteCategories = async (req, res) => {
         // Преобразуем ID в числа
         const numericIds = ids.map(id => parseInt(id));
 
-        const { rows } = await pool.query(deleteCategoriesQuery, [numericIds]); // Передаем список id для удаления
-        res.json({ message: 'Категории успешно удалены', deleted: rows });
+        // Проверка использования категорий
+        const { rows: usageRows } = await pool.query(
+            checkCategoryUsageQuery,
+            [numericIds]
+        );
+
+        // Разделение на конфликтные (есть зависимости в другой таблице) и разрешенные
+        const conflicts = usageRows.filter(row => row.isUsed).map(row => row.name);
+        const allowedIds = usageRows.filter(row => !row.isUsed).map(row => row.id);
+
+        // Удаление разрешенных категорий
+        let deleted = [];
+        if (allowedIds.length > 0) {
+            const { rows } = await pool.query(deleteCategoriesQuery, [allowedIds]);
+
+            deleted = rows.map(row => row.name);
+        }
+        
+        // Ответ
+        if (conflicts.length > 0) {
+            res.status(207).json({
+                message: 'Частичное удаление',
+                conflicts,
+                deleted
+            });
+        } else {
+            res.json({
+                message: 'Все категории удалены',
+                deleted
+            });
+        }
 
     } catch (err) {
         console.error(err);
@@ -113,9 +144,9 @@ exports.archiveCategories = async (req, res) => {
         const numericIds = ids.map(id => parseInt(id));
 
         const { rows } = await pool.query(archiveCategoriesQuery, [numericIds, archive]);
-        res.json({ 
-            message: archive ? 'Категории архивированы' : 'Категории извлечены из архива', 
-            updated: rows 
+        res.json({
+            message: archive ? 'Категории архивированы' : 'Категории извлечены из архива',
+            updated: rows
         });
 
     } catch (err) {

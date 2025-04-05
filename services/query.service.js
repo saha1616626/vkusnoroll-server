@@ -48,8 +48,15 @@ exports.archiveCategoriesQuery = `
   RETURNING *
 `;
 
-// Проверка использования категории в таблице dish
-
+// Проверка использования категорий в таблице dish (в блюдах)
+exports.checkCategoryUsageQuery = `
+  SELECT 
+    c.id,
+    c.name,
+    EXISTS(SELECT 1 FROM dish WHERE "categoryId" = c.id) as "isUsed"
+  FROM category c
+  WHERE c.id = ANY($1::integer[]);
+`;
 
 // Блюда
 
