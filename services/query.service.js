@@ -1,5 +1,7 @@
 // Сервис запросов
 
+// Категории
+
 // Получаем список категорий блюд
 exports.getCategoriesQuery = `
 SELECT
@@ -7,7 +9,51 @@ SELECT
   FROM category
 `;
 
-// Получаем список блюд, где id категории заменен на название
+// Получаем категорию по id
+exports.getСategoryByIdQuery = `
+  ${exports.getCategoriesQuery}
+  WHERE d.id = $1
+`;
+
+// Добавляем категорию
+exports.createСategoryQuery = `
+  INSERT INTO category (
+    name, description, "isArchived"
+  ) VALUES ($1, $2, $3)
+  RETURNING *
+`;
+
+// Изменяем категорию
+exports.updateСategoryQuery = `
+  UPDATE category SET
+    name = $1,
+    description = $2,
+    "isArchived" = $3,
+  WHERE id = $4
+  RETURNING *
+`;
+
+// Удаление списка категорий
+exports.deleteCategoriesQuery = `
+  DELETE FROM category
+  WHERE id = ANY($1::integer[])
+  RETURNING *
+`;
+
+// Архивировать/разархивировать категорию
+exports.archiveCategoriesQuery = `
+  UPDATE category 
+  SET "isArchived" = $2
+  WHERE id = ANY($1::integer[])
+  RETURNING *
+`;
+
+// Проверка использования категории в таблице dish
+
+
+// Блюда
+
+// Получаем список блюд, где categoryId категории заменен на название категории
 exports.getDishesQuery = `
 SELECT
     d.id, 
