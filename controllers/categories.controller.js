@@ -8,7 +8,7 @@ const {
     updateСategoryQuery,
     deleteCategoriesQuery,
     archiveCategoriesQuery,
-    checkCategoryUsageQuery
+    checkCategoriesUsageQuery
 } = require('../services/query.service');
 
 // Получение полного списка категорий
@@ -95,7 +95,7 @@ exports.deleteCategories = async (req, res) => {
 
         // Проверка использования категорий
         const { rows: usageRows } = await pool.query(
-            checkCategoryUsageQuery,
+            checkCategoriesUsageQuery,
             [numericIds]
         );
 

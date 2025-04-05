@@ -7,7 +7,8 @@ const {
     createDishQuery,
     updateDishQuery,
     deleteDishesQuery,
-    archiveDishesQuery
+    archiveDishesQuery,
+    checkDishesUsageQuery
 } = require('../services/query.service'); // Запросы
 
 // Получение полного списка блюд
@@ -123,6 +124,7 @@ exports.deleteDishes = async (req, res) => {
     try {
         const { ids } = req.body;
         
+        // Валидация
         if (!ids || !Array.isArray(ids) || ids.length === 0) { // Проверка на существование данных, на массив, на длину массива
             return res.status(400).json({ error: 'Некорректный список ID' });
         }
@@ -130,8 +132,37 @@ exports.deleteDishes = async (req, res) => {
         // Преобразуем ID в числа
         const numericIds = ids.map(id => parseInt(id));
 
-        const { rows } = await pool.query(deleteDishesQuery, [numericIds]); // Передаем список id для удаления
-        res.json({ message: 'Блюда успешно удалены', deleted: rows });
+        // Проверка использования блюд
+        const { rows: usageRows } = await pool.query(
+            checkDishesUsageQuery,
+            [numericIds]
+        );
+
+        // Разделение на конфликтные (есть зависимости в другой таблице) и разрешенные
+        const conflicts = usageRows.filter(row => row.isUsed).map(row => row.name);
+        const allowedIds = usageRows.filter(row => !row.isUsed).map(row => row.id);
+
+        // Удаление разрешенных блюд
+        let deleted = [];
+        if (allowedIds.length > 0) {
+            const { rows } = await pool.query(deleteDishesQuery, [allowedIds]);
+
+            deleted = rows.map(row => row.name);
+        }
+
+        // Ответ
+        if (conflicts.length > 0) {
+            res.status(207).json({
+                message: 'Частичное удаление',
+                conflicts,
+                deleted
+            });
+        } else {
+            res.json({
+                message: 'Все блюда удалены',
+                deleted
+            });
+        }
 
     } catch (err) {
         console.error(err);

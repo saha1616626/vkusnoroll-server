@@ -49,7 +49,7 @@ exports.archiveCategoriesQuery = `
 `;
 
 // Проверка использования категорий в таблице dish (в блюдах)
-exports.checkCategoryUsageQuery = `
+exports.checkCategoriesUsageQuery = `
   SELECT 
     c.id,
     c.name,
@@ -137,4 +137,14 @@ exports.archiveDishesQuery = `
   SET "isArchived" = $2
   WHERE id = ANY($1::integer[])
   RETURNING *
+`;
+
+// Проверка использования блюд в таблице compositionOrder (в составе заказа)
+exports.checkDishesUsageQuery = `
+  SELECT 
+    c.id,
+    c.name,
+    EXISTS(SELECT 1 FROM "compositionOrder" WHERE "dishId" = c.id) as "isUsed"
+  FROM dish c
+  WHERE c.id = ANY($1::integer[]);
 `;
