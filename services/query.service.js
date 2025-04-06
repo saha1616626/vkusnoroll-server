@@ -12,7 +12,7 @@ SELECT
 // Получаем категорию по id
 exports.getСategoryByIdQuery = `
   ${exports.getCategoriesQuery}
-  WHERE d.id = $1
+  WHERE id = $1
 `;
 
 // Добавляем категорию
@@ -28,7 +28,7 @@ exports.updateСategoryQuery = `
   UPDATE category SET
     name = $1,
     description = $2,
-    "isArchived" = $3,
+    "isArchived" = $3
   WHERE id = $4
   RETURNING *
 `;
