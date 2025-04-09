@@ -1,6 +1,8 @@
 // Сервис запросов
 
+
 // Категории
+
 
 // Получаем список категорий блюд
 exports.getCategoriesQuery = `
@@ -58,7 +60,9 @@ exports.checkCategoriesUsageQuery = `
   WHERE c.id = ANY($1::integer[]);
 `;
 
+
 // Блюда
+
 
 // Получаем список блюд, где categoryId категории заменен на название категории
 exports.getDishesQuery = `
@@ -147,4 +151,56 @@ exports.checkDishesUsageQuery = `
     EXISTS(SELECT 1 FROM "compositionOrder" WHERE "dishId" = c.id) as "isUsed"
   FROM dish c
   WHERE c.id = ANY($1::integer[]);
+`;
+
+
+// Новостные посты
+
+
+// Получаем список новостных постов
+exports.getNewsPostsQuery = `
+SELECT
+    *
+  FROM "newsPost"
+`;
+
+// Получаем новостной пост по id
+exports.getNewsPostByIdQuery = `
+  ${exports.getNewsPostsQuery}
+  WHERE id = $1
+`;
+
+// Добавляем новостной пост
+exports.createNewsPostQuery = `
+  INSERT INTO "newsPost" (
+    "dateTimePublication", image, title, message, "isArchived"
+  ) VALUES ($1, $2, $3, $4, $5)
+  RETURNING *
+`;
+
+// Изменяем новостной пост
+exports.updateNewsPostQuery = `
+  UPDATE "newsPost" SET
+    "dateTimePublication" = $1,
+    image = $2,
+    title = $3,
+    message = $4,
+    "isArchived" = $5
+  WHERE id = $6
+  RETURNING *
+`;
+
+// Удаление списка новостей
+exports.deleteNewsPostsQuery = `
+  DELETE FROM "newsPost"
+  WHERE id = ANY($1::integer[])
+  RETURNING *
+`;
+
+// Архивировать/разархивировать новость
+exports.archiveNewsPostsQuery = `
+  UPDATE "newsPost" 
+  SET "isArchived" = $2
+  WHERE id = ANY($1::integer[])
+  RETURNING *
 `;

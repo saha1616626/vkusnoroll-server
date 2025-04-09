@@ -5,6 +5,7 @@ const cors = require('cors');
 
 const dishesRoutes = require('./routes/dishes.routes');
 const categoriesRoutes = require('./routes/categories.routes');
+const newsPostsRoutes = require('./routes/newsPosts.routes');
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use(express.json());
 // Маршруты
 app.use('/api/dishes', dishesRoutes);
 app.use('/api/categories', categoriesRoutes);
+app.use('/api/newsPosts', newsPostsRoutes);
 
 // Обработка ошибок
 app.use((err, req, res, next) => {
