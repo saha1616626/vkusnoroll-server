@@ -14,20 +14,20 @@ const app = express();
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 
-app.use(cookieParser());
-app.use((req, res, next) => {
-    const token = req.cookies.token;
+app.use(cookieParser()); // Middleware для обработки cookies
+app.use((req, res, next) => { // Проверка токена аутентификации в cookie
+    const token = req.cookies.token; // Cоздается собственный middleware, который проверяет наличие токена в cookies
 
-    if (token) {
+    if (token) { // Если токен существует, код выполняет проверку его действительности
         try {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            req.user = decoded;
+            req.user = decoded; // Если токен действителен, его расшифрованное содержимое (например, пользовательские данные) присваивается req.user, что позволяет этому значению быть доступным в следующих middleware и обработчиках маршрутов
         } catch (err) {
-            res.clearCookie('token');
+            res.clearCookie('token'); // Если токен недействителен (например, истек, был подделан и т. д.), возникает ошибка, и в этом случае cookie с токеном очищается 
         }
     }
 
-    next();
+    next(); // Позволяет передать запрос клиенту, иначе при отсутствии вызова запрос зависнет и не дойдет до клиента
 });
 
 // Устанавливаем лимит HTTP-запроса
