@@ -8,6 +8,8 @@ const dishesRoutes = require('./routes/dishes.routes');
 const categoriesRoutes = require('./routes/categories.routes');
 const newsPostsRoutes = require('./routes/newsPosts.routes');
 const authRoutes = require('./routes/auth.routes');
+const accountsRoutes = require('./routes/accounts.routes.js');
+const rolesRoutes = require('./routes/rolesRoutes.routes.js');
 
 const app = express();
 
@@ -50,10 +52,12 @@ app.use(cors({
 app.use(express.json());
 
 // Маршруты
-app.use('/api/dishes', dishesRoutes);
-app.use('/api/categories', categoriesRoutes);
-app.use('/api/newsPosts', newsPostsRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/dishes', dishesRoutes); // Блюда
+app.use('/api/categories', categoriesRoutes); // Категории
+app.use('/api/newsPosts', newsPostsRoutes); // Посты
+app.use('/api/auth', authRoutes); // Авторизация
+app.use('/api/roles', rolesRoutes); // Роли
+app.use('/api/accounts', accountsRoutes); // Учетные записи
 
 // Обработка ошибок
 app.use((err, req, res, next) => {
