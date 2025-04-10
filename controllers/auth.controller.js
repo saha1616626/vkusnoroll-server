@@ -37,7 +37,7 @@ exports.loginAdmin = async (req, res) => {
         const token = jwt.sign(
             { userId: user.id, role: user.role }, // Полезная нагрузка токена (payload)
             process.env.JWT_SECRET, // Секретный ключ для подписи токена
-            { expiresIn: '1m' } // Токен действителен всего 24 часа. После истечения этого времени токен больше не будет считаться действительным.
+            { expiresIn: '24h' } // Токен действителен всего 24 часа. После истечения этого времени токен больше не будет считаться действительным.
         );
 
         // Установка токена в cookie и отправка в теле ответа
@@ -45,13 +45,15 @@ exports.loginAdmin = async (req, res) => {
             httpOnly: true, // Флаг запрещает доступ к cookie с помощью JavaScript
             secure: process.env.NODE_ENV === 'production', // Флаг устанавливает cookie как "secure", что означает, что оно будет передаваться только по защищенному соединению HTTPS. Для продакшена.
             sameSite: 'strict', // Флаг предотвращает отправку cookie при кросс-доменных запросах
-            maxAge: 60000 // Время жизни cookie на 24 часа, что совпадает с временем жизни JWT
+            maxAge: 86400000 // Время жизни cookie на 24 часа, что совпадает с временем жизни JWT
         });
 
         res.json({
             message: 'Успешный вход',
             token, // Отправляем токен и в теле ответа
-            role: user.role
+            role: user.role,
+            userId: user.id, // Id пользователя
+            userName: user.name // Имя пользователя
         }); // Возврат токена и роли
     } catch (err) {
         console.error(err);
