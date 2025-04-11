@@ -21,6 +21,12 @@ SELECT
   JOIN role r ON a."roleId" = r.id
 `;
 
+// Получаем учетную запись по id
+exports.getAccountByIdQuery = `
+  ${exports.getAccountsQuery}
+  WHERE a.id = $1
+`;
+
 // Получаем список всех учетных записей сотрудников
 exports.getEmployeesQuery = `
     ${exports.getAccountsQuery}
