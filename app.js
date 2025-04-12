@@ -40,7 +40,8 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 const allowedOrigins = [
     'http://localhost:3000', // Admin
     'http://localhost:3001', // Manager
-    'http://localhost:3002'  // Restaurant
+    'http://localhost:3002',  // Restaurant
+    'http://localhost:3003'
 ];
 
 app.use(cors({

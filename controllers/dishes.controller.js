@@ -15,6 +15,15 @@ const {
 exports.getAllDishes = async (req, res) => {
     try {
         const { rows } = await pool.query(getDishesQuery); // Получаем массив строк
+
+        // Перебираем каждую запись в массиве
+        for (const dish of rows) {
+            // Если есть Buffer с изображением, конвертируем в base64
+            if (dish.image && Buffer.isBuffer(dish.image)) {
+                dish.image = `data:image/png;base64,${dish.image.toString('base64')}`;
+            }
+        }
+
         res.json(rows);  // Успешно
     } catch (err) {
         console.error(err);
@@ -123,7 +132,7 @@ exports.updateDish = async (req, res) => {
 exports.deleteDishes = async (req, res) => {
     try {
         const { ids } = req.body;
-        
+
         // Валидация
         if (!ids || !Array.isArray(ids) || ids.length === 0) { // Проверка на существование данных, на массив, на длину массива
             return res.status(400).json({ error: 'Некорректный список ID' });
@@ -183,9 +192,9 @@ exports.archiveDishes = async (req, res) => {
         const numericIds = ids.map(id => parseInt(id));
 
         const { rows } = await pool.query(archiveDishesQuery, [numericIds, archive]);
-        res.json({ 
-            message: archive ? 'Блюда архивированы' : 'Блюда извлечены из архива', 
-            updated: rows 
+        res.json({
+            message: archive ? 'Блюда архивированы' : 'Блюда извлечены из архива',
+            updated: rows
         });
 
     } catch (err) {

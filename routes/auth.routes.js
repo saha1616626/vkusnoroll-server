@@ -4,7 +4,7 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller'); // Контроллер для входа/выхода т тд
 
-router.post('/login', authController.loginAdmin);
-router.post('/logout', authController.logout);
+router.post('/admin/login', authController.loginAdmin);
+router.post('/admin/logout', authController.logout);
 
 module.exports = router;
