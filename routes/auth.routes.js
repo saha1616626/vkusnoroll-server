@@ -4,7 +4,14 @@ const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/auth.controller'); // Контроллер для входа/выхода т тд
 
+// Администратор
 router.post('/admin/login', authController.loginAdmin);
-router.post('/admin/logout', authController.logout);
+router.post('/admin/logout', authController.logoutAdmin);
+
+// Менеджер
+
+// Пользователь
+router.post('/user/login', authController.loginUser);
+router.post('/user/logout', authController.logoutUser);
 
 module.exports = router;
