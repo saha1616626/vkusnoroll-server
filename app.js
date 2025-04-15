@@ -10,6 +10,7 @@ const newsPostsRoutes = require('./routes/newsPosts.routes');
 const authRoutes = require('./routes/auth.routes');
 const accountsRoutes = require('./routes/accounts.routes.js');
 const rolesRoutes = require('./routes/rolesRoutes.routes.js');
+const cartRoutes = require('./routes/cart.routes');
 
 const app = express();
 
@@ -59,6 +60,7 @@ app.use('/api/newsPosts', newsPostsRoutes); // Посты
 app.use('/api/auth', authRoutes); // Авторизация
 app.use('/api/roles', rolesRoutes); // Роли
 app.use('/api/accounts', accountsRoutes); // Учетные записи
+app.use('/api/cart', cartRoutes); // Корзина
 
 // Обработка ошибок
 app.use((err, req, res, next) => {
