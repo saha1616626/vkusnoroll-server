@@ -38,3 +38,13 @@ exports.getClientsQuery = `
     ${exports.getAccountsQuery}
     WHERE r.name != 'Администратор' and r.name != 'Менеджер'
 `;
+
+// Обновление данных учетной записи клиентом (пользовательская часть)
+exports.updateAccountQuery = `
+  UPDATE account 
+  SET 
+    name = $1,
+    "numberPhone" = $2
+  WHERE id = $3
+  RETURNING *;
+`;

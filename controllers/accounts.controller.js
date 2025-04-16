@@ -5,7 +5,8 @@ const {
     getAccountsQuery,
     getAccountByIdQuery,
     getEmployeesQuery,
-    getClientsQuery
+    getClientsQuery,
+    updateAccountQuery
 } = require('../services/account.query.service'); // Запросы
 
 // Получение учетной записи по ID
@@ -51,3 +52,29 @@ exports.getClients = async (req, res) => {
     }
 };
 
+// Обновление данных учетной записи клиентом (пользовательская часть)
+exports.updateAccount = async (req, res) => {
+    const { id } = req.params;
+    const { name, numberPhone } = req.body;
+
+    try {
+
+        // Обновление данных
+        const { rows } = await pool.query(updateAccountQuery, [
+            name,
+            numberPhone,
+            id
+        ]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: 'Пользователь не найден' });
+        }
+
+        // Убираем чувствительные данные из ответа
+        const { password, confirmationСode, ...safeData } = rows[0];
+
+        res.json(safeData);
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка сервера при обновлении данных' });
+    }
+}
