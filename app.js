@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth.routes');
 const accountsRoutes = require('./routes/accounts.routes.js');
 const rolesRoutes = require('./routes/rolesRoutes.routes.js');
 const cartRoutes = require('./routes/cart.routes');
+const orderStatusesRoutes = require('./routes/orderStatuses.routes.js');
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use('/api/auth', authRoutes); // Авторизация
 app.use('/api/roles', rolesRoutes); // Роли
 app.use('/api/accounts', accountsRoutes); // Учетные записи
 app.use('/api/cart', cartRoutes); // Корзина
+app.use('/api/orderStatuses', orderStatusesRoutes); // Статусы заказов
 
 // Обработка ошибок
 app.use((err, req, res, next) => {
