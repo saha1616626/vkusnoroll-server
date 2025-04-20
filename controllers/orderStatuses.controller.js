@@ -26,6 +26,23 @@ exports.getStatusById = async (req, res) => {
 // Сохнарить новый статус заказа
 exports.createStatus = async (req, res) => {
     try {
+        const { isFinalResultPositive } = req.body;
+
+        // Проверка на попытку создания второго финального статуса
+        if (isFinalResultPositive === true) {
+            const existingFinalStatus = await pool.query(
+                'SELECT id FROM "orderStatus" WHERE "isFinalResultPositive" = true'
+            );
+
+            // Если такой тип статуса есть
+            if (existingFinalStatus.rows.length > 0) {
+                return res.status(400).json({
+                    error: 'Финальный положительный статус может быть только один',
+                    conflicts: ['Уже существует статус с положительным финальным результатом']
+                });
+            }
+        }
+
         // Получаем максимальный порядковый номер
         const sequenceNumber = await pool.query('SELECT MAX("sequenceNumber") AS max_sequence FROM "orderStatus"');
 
@@ -33,11 +50,15 @@ exports.createStatus = async (req, res) => {
             name, "sequenceNumber", "isFinalResultPositive", "isAvailableClient") 
             VALUES ($1, $2, $3, $4)
             RETURNING *`,
-            [req.body.name, sequenceNumber.rows[0].max_sequence + 1, req.body.isFinalResultPositive, req.body.isAvailableClient])
+            [
+                req.body.name,
+                sequenceNumber.rows[0].max_sequence + 1,
+                isFinalResultPositive,
+                req.body.isAvailableClient
+            ]
+        );
 
         res.status(201).json(rows[0]); // Успешно
-
-        // TODO при попытке создании 2 успешного статуса нужно вывести сообщение об ошибке
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Internal server error' });
@@ -47,13 +68,29 @@ exports.createStatus = async (req, res) => {
 // Обновить статус заказа
 exports.updateStatus = async (req, res) => {
     try {
+        const { isFinalResultPositive } = req.body;
+
+        // Проверка на попытку обновления финального статуса при наличии уже других статусов с таким типом
+        if (isFinalResultPositive === true) {
+            const existingFinalStatus = await pool.query(
+                'SELECT id FROM "orderStatus" WHERE "isFinalResultPositive" = true AND "orderStatus".id != $1',
+                [req.params.id]
+            );
+
+            // Если такой тип статуса есть (кроме текущего статуса)
+            if (existingFinalStatus.rows.length > 0) {
+                return res.status(400).json({
+                    error: 'Финальный положительный статус может быть только один',
+                    conflicts: ['Уже существует статус с положительным финальным результатом']
+                });
+            }
+        }
+
         const { rows } = await pool.query(`UPDATE "orderStatus" SET
             name = $1, "sequenceNumber" = $2, "isFinalResultPositive" = $3, "isAvailableClient" = $4
             WHERE id = $5
             RETURNING *`,
-            [req.body.name, req.body.sequenceNumber, req.body.isFinalResultPositive, req.body.isAvailableClient, req.params.id])
-
-        // TODO при попытке обновлении 2 успешного статуса нужно вывести сообщение об ошибке
+            [req.body.name, req.body.sequenceNumber, isFinalResultPositive, req.body.isAvailableClient, req.params.id])
 
         if (rows.length === 0) {
             return res.status(404).json({ error: 'Статус не найден' });
