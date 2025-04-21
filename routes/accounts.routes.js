@@ -9,10 +9,12 @@ const authMiddleware = require('../middleware/auth.middleware'); // Провер
 router.get('/user/:id', accountsController.getAccountById);
 
 // Маршруты для клиента (пользовательская часть)
-router.patch('/buyer/:id', authMiddleware, accountsController.updateAccount); // Обновление данных в личном кабинете
+router.patch('/buyer/:id', authMiddleware, accountsController.updateAccountBuyer); // Обновление данных в личном кабинете
+router.post('/buyer', accountsController.createAccountBuyer); // Регистрация аккаунта
 
 // Маршруты для сотрудников (админ часть)
 router.get('/employees', accountsController.getEmployees);
+router.post('/employees', accountsController.createEmploye);
 
 // Маршруты для пользователей (админ часть)
 router.get('/clients', accountsController.getClients);

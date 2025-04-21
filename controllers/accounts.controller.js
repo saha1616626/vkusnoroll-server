@@ -1,12 +1,15 @@
 // Контроллер для работы с учетными записями
 
 const pool = require('../config/db'); // Подключение к БД
+const { sendConfirmationEmail } = require('../config/mailopost-service'); // Подключение к почтовому серверу. Подтверждение почты
 const {
     getAccountsQuery,
     getAccountByIdQuery,
     getEmployeesQuery,
+    createEmployeQuery,
     getClientsQuery,
-    updateAccountQuery
+    updateAccountBuyerQuery,
+    createAccountBuyerQuery
 } = require('../services/account.query.service'); // Запросы
 
 // Получение учетной записи по ID
@@ -40,6 +43,33 @@ exports.getEmployees = async (req, res) => {
     }
 };
 
+// Создание учетной записи сотрудника 
+exports.createEmploye = async (req, res) => {
+
+    // Тестовая отправка email
+    const emailSent = await sendConfirmationEmail('3.commm@gmail.com', '123456');
+
+    if (!emailSent) {
+        return res.status(500).send('Ошибка отправки письма');
+    }
+
+    // const { rows: rows } = await pool.query(createEmployeQuery,
+    //     [
+    //         req.body.roleId,
+    //         req.body.name,
+    //         req.body.surname,
+    //         req.body.patronymic,
+    //         req.body.email,
+    //         req.body.numberPhone,
+    //         req.body.login,
+    //         req.body.password,
+    //         req.body.isAccountTermination
+    //     ]
+    // );
+
+    // res.status(201).json(rows[0]);
+};
+
 // Получение полного списка пользователей
 exports.getClients = async (req, res) => {
     try {
@@ -53,14 +83,14 @@ exports.getClients = async (req, res) => {
 };
 
 // Обновление данных учетной записи клиентом (пользовательская часть)
-exports.updateAccount = async (req, res) => {
+exports.updateAccountBuyer = async (req, res) => {
     const { id } = req.params;
     const { name, numberPhone } = req.body;
 
     try {
 
         // Обновление данных
-        const { rows } = await pool.query(updateAccountQuery, [
+        const { rows } = await pool.query(updateAccountBuyerQuery, [
             name,
             numberPhone,
             id
@@ -78,3 +108,35 @@ exports.updateAccount = async (req, res) => {
         res.status(500).json({ error: 'Ошибка сервера при обновлении данных' });
     }
 }
+
+// Создание (регистрация) учетной записи клиента (пользовательская часть)
+exports.createAccountBuyer = async (req, res) => {
+
+    // Получаем пользовательскую роль
+    const getUserRole = await pool.query(`SELECT id as role
+        FROM role
+        WHERE name = 'Пользователь'`);
+
+    let userRole; // Роль клиента
+    if (getUserRole.rows.length > 0) {
+        // Если роль существует, получаем её
+        userRole = getUserRole.rows[0];
+    } else {
+        // Если роль не найдена, создаем новую
+        const newUserRole = await pool.query(
+            `INSERT INTO role 
+             VALUES ('Пользователь')`
+        );
+        userRole = newUserRole.rows[0];
+    }
+
+    const { rows: rows } = await pool.query(createAccountBuyerQuery,
+        [
+            userRole.id,
+            req.body.email,
+            req.body.password
+        ]
+    );
+
+    res.status(201).json(rows[0]);
+};

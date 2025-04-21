@@ -33,6 +33,23 @@ exports.getEmployeesQuery = `
     WHERE r.name != 'Пользователь'
 `;
 
+// Создание учетной записи сотрудника 
+exports.createEmployeQuery = `
+  INSERT INTO account (
+    "roleId",
+    name,
+    surname,
+    patronymic,
+    email,
+    "numberPhone",
+    login,
+    password,
+    "registrationDate",
+    "isAccountTermination")
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
+  RETURNING *
+`;
+
 // Получаем список всех учетных записей пользователей
 exports.getClientsQuery = `
     ${exports.getAccountsQuery}
@@ -40,11 +57,23 @@ exports.getClientsQuery = `
 `;
 
 // Обновление данных учетной записи клиентом (пользовательская часть)
-exports.updateAccountQuery = `
+exports.updateAccountBuyerQuery = `
   UPDATE account 
   SET 
     name = $1,
     "numberPhone" = $2
   WHERE id = $3
   RETURNING *;
+`;
+
+// Создание (регистрация) учетной записи клиента (пользовательская часть)
+exports.createAccountBuyerQuery = `
+INSERT INTO account (
+  "roleId",
+  email,
+  password,
+  "registrationDate",
+  "isAccountTermination")
+VALUES ($1, $2, $3, NOW(), false)
+RETURNING *
 `;
