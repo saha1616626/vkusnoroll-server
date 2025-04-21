@@ -1,7 +1,7 @@
 // Контроллер для работы с учетными записями
 
 const pool = require('../config/db'); // Подключение к БД
-const { sendConfirmationEmail } = require('../config/mailopost-service'); // Подключение к почтовому серверу. Подтверждение почты
+const mailService = require('../services/mail/mail.service'); // Подключение к почтовому серверу
 const {
     getAccountsQuery,
     getAccountByIdQuery,
@@ -47,11 +47,12 @@ exports.getEmployees = async (req, res) => {
 exports.createEmploye = async (req, res) => {
 
     // Тестовая отправка email
-    const emailSent = await sendConfirmationEmail('3.commm@gmail.com', '123456');
+    const { success, error } = await mailService.sendConfirmationRegistration('3.commm@gmail.com', '123456');
 
-    if (!emailSent) {
-        return res.status(500).send('Ошибка отправки письма');
-    }
+    if (!success) {
+        console.error('Mail error:', error);
+        return res.status(502).json({ error: 'Ошибка отправки письма' });
+      }
 
     // const { rows: rows } = await pool.query(createEmployeQuery,
     //     [
