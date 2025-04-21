@@ -1,7 +1,6 @@
 // Контроллер для работы с учетными записями
 
 const pool = require('../config/db'); // Подключение к БД
-const mailService = require('../services/mail/mail.service'); // Подключение к почтовому серверу
 const {
     getAccountsQuery,
     getAccountByIdQuery,
@@ -9,7 +8,8 @@ const {
     createEmployeQuery,
     getClientsQuery,
     updateAccountBuyerQuery,
-    createAccountBuyerQuery
+    createAccountBuyerQuery,
+    checkEmailForUniqueGivenRoleQuery
 } = require('../services/account.query.service'); // Запросы
 
 // Получение учетной записи по ID
@@ -46,30 +46,55 @@ exports.getEmployees = async (req, res) => {
 // Создание учетной записи сотрудника 
 exports.createEmploye = async (req, res) => {
 
-    // Тестовая отправка email
-    const { success, error } = await mailService.sendConfirmationRegistration('3.commm@gmail.com', '123456');
+    const { email, roleId } = req.body;
+    try {
+        // Проверка уникальности Email для роли
+        const checkResult = await pool.query(
+            checkEmailForUniqueGivenRoleQuery,
+            [email, roleId]
+        );
 
-    if (!success) {
-        console.error('Mail error:', error);
-        return res.status(502).json({ error: 'Ошибка отправки письма' });
-      }
+        if (checkResult.rows[0].emailExists) {
+            return res.status(400).json({
+                error: 'Email уже используется для этой роли'
+            });
+        }
 
-    // const { rows: rows } = await pool.query(createEmployeQuery,
-    //     [
-    //         req.body.roleId,
-    //         req.body.name,
-    //         req.body.surname,
-    //         req.body.patronymic,
-    //         req.body.email,
-    //         req.body.numberPhone,
-    //         req.body.login,
-    //         req.body.password,
-    //         req.body.isAccountTermination
-    //     ]
-    // );
+        // Создание сотрудника
+        const { rows } = await pool.query(createEmployeQuery, [
+            roleId,
+            req.body.name,
+            req.body.surname,
+            req.body.patronymic,
+            email,
+            req.body.numberPhone,
+            req.body.login,
+            req.body.password,
+            req.body.isAccountTermination
+        ]);
 
-    // res.status(201).json(rows[0]);
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            error: 'Ошибка сервера при создании сотрудника'
+        });
+    }
 };
+
+// Удаление учетной записи сотрудника
+exports.deleteEmploye = async (req, res) => {
+    try {
+
+        // TODO
+        // Не забываем перевести все открытые чаты в состояие закрыты для данного пользователя (при наличии).
+        // Предупреждаем администратора, что при удалении все чаты станут не принятыми c сохранением истории переписки. Или закрываем чаты и уведомляем пользователей в ТГ о закрытии линии.
+        // Создаем триггер на действие удаление account, accountId = null, isChatAccepted = false, 
+
+    } catch (err) {
+
+    }
+}
 
 // Получение полного списка пользователей
 exports.getClients = async (req, res) => {

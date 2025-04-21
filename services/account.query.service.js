@@ -77,3 +77,13 @@ INSERT INTO account (
 VALUES ($1, $2, $3, NOW(), false)
 RETURNING *
 `;
+
+// Проверка уникальности Email для данной роли
+exports.checkEmailForUniqueGivenRoleQuery = `
+  SELECT EXISTS(
+    SELECT 1 
+    FROM account 
+    WHERE email = $1 
+      AND "roleId" = $2
+  ) AS "emailExists";
+`;

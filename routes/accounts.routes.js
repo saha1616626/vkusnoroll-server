@@ -15,6 +15,7 @@ router.post('/buyer', accountsController.createAccountBuyer); // Регистр�
 // Маршруты для сотрудников (админ часть)
 router.get('/employees', accountsController.getEmployees);
 router.post('/employees', accountsController.createEmploye);
+router.delete('/employees', accountsController.deleteEmploye);
 
 // Маршруты для пользователей (админ часть)
 router.get('/clients', accountsController.getClients);
