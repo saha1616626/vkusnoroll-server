@@ -10,11 +10,15 @@ const {
     updateAccountBuyerQuery,
     createAccountBuyerQuery,
     checkEmailForUniqueGivenRoleQuery,
+    checkLoginForUniqueQuery,
     installingEmailConfirmationCodeQuery,
-    verificationConfirmationCodeQuery
+    verificationConfirmationCodeQuery,
+    checkUserActiveСhatsQuery,
+    updatingChatsAfterAccountDeletion
 } = require('../services/account.query.service'); // Запросы
 const mailService = require('../services/mail/mail.service'); // Подключение к почтовому серверу
 const crypto = require('crypto'); // Модуль crypto
+const bcrypt = require('bcrypt'); // Шифрование пароля
 
 // Криптографически безопасный генератор кода для email
 const generateConfirmationCode = () => {
@@ -55,7 +59,7 @@ exports.getEmployees = async (req, res) => {
 // Создание учетной записи сотрудника 
 exports.createEmploye = async (req, res) => {
 
-    const { email, roleId } = req.body;
+    const { email, roleId, login } = req.body;
     try {
         // Проверка уникальности Email для роли
         const checkResult = await pool.query(
@@ -70,6 +74,16 @@ exports.createEmploye = async (req, res) => {
         }
 
         // Проверка уникальности логина
+        const checkLoginResult = await pool.query(
+            checkLoginForUniqueQuery,
+            [login]
+        );
+
+        if (checkLoginResult.rows[0].loginExists) {
+            return res.status(400).json({ error: 'Логин уже используется' });
+        }
+
+        const hashedPassword = await bcrypt.hash(req.body.password, 10); // Шифрование пароля
 
         // Создание сотрудника
         const { rows } = await pool.query(createEmployeQuery, [
@@ -80,7 +94,7 @@ exports.createEmploye = async (req, res) => {
             email,
             req.body.numberPhone,
             req.body.login,
-            req.body.password,
+            hashedPassword,
             req.body.isAccountTermination,
             req.body.isOrderManagementAvailable,
             req.body.isMessageCenterAvailable
@@ -95,18 +109,55 @@ exports.createEmploye = async (req, res) => {
     }
 };
 
+// Количество незавершенных чатов у выбранного пользователя
+exports.checkActiveChats = async (req, res) => {
+    try {
+        const { rows } = await pool.query(checkUserActiveСhatsQuery,
+            [req.params.id]
+        );
+
+        res.json({ activeChats: parseInt(rows[0].activeChats) });
+    } catch (err) {
+        res.status(500).json({ error: 'Ошибка проверки чатов' });
+    }
+}
+
 // Удаление учетной записи сотрудника
 exports.deleteEmploye = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
     try {
+        await client.query('BEGIN'); // Начало транзакции
 
-        // TODO
-        // Не забываем перевести все открытые чаты в состояие закрыты для данного пользователя (при наличии).
-        // Предупреждаем администратора, что при удалении все чаты станут не принятыми c сохранением истории переписки. Или закрываем чаты и уведомляем пользователей в ТГ о закрытии линии.
-        // Создаем триггер на действие удаление account, accountId = null, isChatAccepted = false, 
+        // Проверка активных чатов
+        const { rows: chatRows } = await client.query(checkUserActiveСhatsQuery,
+            [req.params.id]
+        );
 
+        // Обновление чатов
+        await client.query(updatingChatsAfterAccountDeletion,
+            [req.params.id]
+        );
+
+        // Удаление аккаунта
+        await client.query(
+            `DELETE FROM account WHERE id = $1`,
+            [req.params.id]
+        );
+
+        await client.query('COMMIT');
+        res.json({
+            success: true,
+            activeChats: parseInt(chatRows[0].activeChats)
+        });
     } catch (err) {
-
-    }
+        await client.query('ROLLBACK');
+        console.error('Ошибка удаления:', err);
+        res.status(500).json({
+            error: err.message || 'Ошибка при удалении сотрудника'
+        });
+    } finally {
+        client.release();
+    } 
 };
 
 // Отправка кода подтверждения на Email. Подтверждение почты сотрудника
@@ -128,10 +179,10 @@ exports.sendEmployeeСonfirmationСodeEmail = async (req, res) => {
         }
 
         // Отправка письма
-        const { success } = await mailService.sendShiftConfirmation(email, code);
-        if (!success) {
-            throw new Error('Ошибка отправки письма');
-        }
+        // const { success } = await mailService.sendShiftConfirmation(email, code);
+        // if (!success) {
+        //     throw new Error('Ошибка отправки письма');
+        // }
 
         await client.query('COMMIT');
         res.json({ success: true });

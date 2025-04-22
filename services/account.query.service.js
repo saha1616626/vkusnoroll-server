@@ -93,6 +93,15 @@ exports.checkEmailForUniqueGivenRoleQuery = `
   ) AS "emailExists";
 `;
 
+// Проверка уникальности логина
+exports.checkLoginForUniqueQuery = `
+  SELECT EXISTS(
+    SELECT 1 
+    FROM account 
+    WHERE login = $1
+  ) AS "loginExists";
+`;
+
 // Установка кода подтверждения email в БД
 exports.installingEmailConfirmationCodeQuery = `
 UPDATE account 
@@ -112,4 +121,18 @@ WHERE id = $1
   AND "confirmationСode" = $2 
   AND "dateTimeСodeCreation" > NOW() - INTERVAL '24 hours'
 RETURNING *
+`;
+
+// Количество незавершенных чатов у выбранного пользователя
+exports.checkUserActiveСhatsQuery = `
+SELECT COUNT(*) as "activeChats" 
+  FROM chat 
+  WHERE "accountId" = $1 AND "isChatOver" = false
+`;
+
+// Обновление чатов после удаления аккаунта. Незавершённым чатам устанавливается статус «непринятый»
+exports.updatingChatsAfterAccountDeletion = `
+UPDATE chat 
+  SET "isChatAccepted" = false 
+  WHERE "accountId" = $1 AND "isChatOver" = false
 `;

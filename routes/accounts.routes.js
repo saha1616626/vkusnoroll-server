@@ -1,4 +1,4 @@
-// Маршруты для работы с учетными записями// Маршруты для работы с учетными записями
+// Маршруты для работы с учетными записями
 
 const express = require('express');
 const router = express.Router();
@@ -15,9 +15,10 @@ router.post('/buyer', accountsController.createAccountBuyer); // Регистр�
 // Маршруты для сотрудников (админ часть)
 router.get('/employees', accountsController.getEmployees);
 router.post('/employees', accountsController.createEmploye);
-router.delete('/employees', accountsController.deleteEmploye);
 router.post('/employees/:id/send-code', accountsController.sendEmployeeСonfirmationСodeEmail); // Отправка кода подтверждения на Email
 router.post('/employees/:id/verify-code', accountsController.verifyEmployeeСonfirmationСodeEmail); // Проверка кода подтверждения
+router.get('/employees/:id/active-chats', accountsController.checkActiveChats); // Количество незавершенных чатов у выбранного пользователя
+router.delete('/employees/:id', accountsController.deleteEmploye); // Удаление сотрудника
 
 // Маршруты для пользователей (админ часть)
 router.get('/clients', accountsController.getClients);
