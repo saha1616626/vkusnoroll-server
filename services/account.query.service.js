@@ -92,3 +92,24 @@ exports.checkEmailForUniqueGivenRoleQuery = `
       AND "roleId" = $2
   ) AS "emailExists";
 `;
+
+// Установка кода подтверждения email в БД
+exports.installingEmailConfirmationCodeQuery = `
+UPDATE account 
+SET "confirmationСode" = $1, 
+    "dateTimeСodeCreation" = NOW() 
+WHERE id = $2 
+RETURNING email
+`;
+
+// Проверка код подтверждения отправленного на email
+exports.verificationConfirmationCodeQuery = `
+UPDATE account 
+SET "isEmailConfirmed" = true,
+    "confirmationСode" = NULL,
+    "dateTimeСodeCreation" = NULL 
+WHERE id = $1 
+  AND "confirmationСode" = $2 
+  AND "dateTimeСodeCreation" > NOW() - INTERVAL '24 hours'
+RETURNING *
+`;

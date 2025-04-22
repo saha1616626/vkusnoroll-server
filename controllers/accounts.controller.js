@@ -9,8 +9,17 @@ const {
     getClientsQuery,
     updateAccountBuyerQuery,
     createAccountBuyerQuery,
-    checkEmailForUniqueGivenRoleQuery
+    checkEmailForUniqueGivenRoleQuery,
+    installingEmailConfirmationCodeQuery,
+    verificationConfirmationCodeQuery
 } = require('../services/account.query.service'); // Запросы
+const mailService = require('../services/mail/mail.service'); // Подключение к почтовому серверу
+const crypto = require('crypto'); // Модуль crypto
+
+// Криптографически безопасный генератор кода для email
+const generateConfirmationCode = () => {
+    return crypto.randomInt(100000, 999999); // 6-значный код
+};
 
 // Получение учетной записи по ID
 exports.getAccountById = async (req, res) => {
@@ -98,7 +107,70 @@ exports.deleteEmploye = async (req, res) => {
     } catch (err) {
 
     }
-}
+};
+
+// Отправка кода подтверждения на Email. Подтверждение почты сотрудника
+exports.sendEmployeeСonfirmationСodeEmail = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
+
+        // Генерация и установка кода
+        const code = generateConfirmationCode();
+        const updateResult = await client.query(installingEmailConfirmationCodeQuery,
+            [code, req.params.id]
+        );
+
+        // Получаем email из БД
+        const email = updateResult.rows[0]?.email;
+        if (!email) {
+            throw new Error('Аккаунт не найден');
+        }
+
+        // Отправка письма
+        const { success } = await mailService.sendShiftConfirmation(email, code);
+        if (!success) {
+            throw new Error('Ошибка отправки письма');
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true });
+    } catch (err) {
+        await client.query('ROLLBACK'); // Откат при ошибке
+        res.status(500).json({
+            error: err.message || 'Ошибка отправки кода'
+        });
+    } finally {
+        client.release(); // Освобождаем клиент
+    }
+};
+
+// Проверка кода подтверждения отправеленного на Email почты сотрудника
+exports.verifyEmployeeСonfirmationСodeEmail = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { code } = req.body;
+
+        // Проверка типа кода
+        if (typeof code !== 'string') {
+            return res.status(400).json({ error: "Код должен быть строкой" });
+        }
+
+        // Выполнение запроса к БД
+        const { rows } = await pool.query(verificationConfirmationCodeQuery, [id, code]);
+
+        if (rows.length === 0) {
+            return res.status(400).json({
+                error: 'Неверный код или срок действия истек'
+            });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Ошибка верификации:", err);
+        res.status(500).json({ error: "Внутренняя ошибка сервера" });
+    }
+};
 
 // Получение полного списка пользователей
 exports.getClients = async (req, res) => {

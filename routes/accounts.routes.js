@@ -16,6 +16,8 @@ router.post('/buyer', accountsController.createAccountBuyer); // Регистр�
 router.get('/employees', accountsController.getEmployees);
 router.post('/employees', accountsController.createEmploye);
 router.delete('/employees', accountsController.deleteEmploye);
+router.post('/employees/:id/send-code', accountsController.sendEmployeeСonfirmationСodeEmail); // Отправка кода подтверждения на Email
+router.post('/employees/:id/verify-code', accountsController.verifyEmployeeСonfirmationСodeEmail); // Проверка кода подтверждения
 
 // Маршруты для пользователей (админ часть)
 router.get('/clients', accountsController.getClients);
