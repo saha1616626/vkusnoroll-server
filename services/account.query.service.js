@@ -16,7 +16,10 @@ SELECT
     a."registrationDate",
     a."confirmationСode",
     a."dateTimeСodeCreation",
-    a."isAccountTermination"
+    a."isAccountTermination",
+    a."isEmailConfirmed",
+    a."isOrderManagementAvailable", 
+    a."isMessageCenterAvailable"
   FROM account a
   JOIN role r ON a."roleId" = r.id
 `;
@@ -45,8 +48,10 @@ exports.createEmployeQuery = `
     login,
     password,
     "registrationDate",
-    "isAccountTermination")
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)
+    "isAccountTermination",
+    "isOrderManagementAvailable", 
+    "isMessageCenterAvailable")
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10, $11)
   RETURNING *
 `;
 

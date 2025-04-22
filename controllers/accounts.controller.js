@@ -60,6 +60,8 @@ exports.createEmploye = async (req, res) => {
             });
         }
 
+        // Проверка уникальности логина
+
         // Создание сотрудника
         const { rows } = await pool.query(createEmployeQuery, [
             roleId,
@@ -70,7 +72,9 @@ exports.createEmploye = async (req, res) => {
             req.body.numberPhone,
             req.body.login,
             req.body.password,
-            req.body.isAccountTermination
+            req.body.isAccountTermination,
+            req.body.isOrderManagementAvailable,
+            req.body.isMessageCenterAvailable
         ]);
 
         res.status(201).json(rows[0]);
