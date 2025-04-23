@@ -16,7 +16,8 @@ const {
     verificationConfirmationCodeQuery,
     checkUserActiveСhatsQuery,
     updatingChatsAfterAccountDeletion,
-    updateEmployeQuery
+    updateEmployeQuery,
+    updateClientQuery
 } = require('../services/account.query.service'); // Запросы
 const mailService = require('../services/mail/mail.service'); // Подключение к почтовому серверу
 const crypto = require('crypto'); // Модуль crypto
@@ -329,6 +330,45 @@ exports.getClients = async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Internal server error' });
+    }
+};
+
+// Обновление клиентского аккаунта (админ часть)
+exports.updateClient = async (req, res) => {
+    try {
+
+        // Обновление клиентского аккаунта
+        const { rows } = await pool.query(updateClientQuery, [
+            req.body.isAccountTermination,
+            req.params.id
+        ]);
+
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            error: 'Ошибка сервера при обновлении пользователя'
+        });
+    }
+}
+
+// Удаление клиентского аккаунта (админ часть)
+exports.deleteClient = async (req, res) => {
+    try {
+
+        // Удаление аккаунта
+        await pool.query(
+            `DELETE FROM account WHERE id = $1`,
+            [req.params.id]
+        );
+        res.json({
+            success: true
+        });
+    } catch (err) {
+        console.error('Ошибка удаления:', err);
+        res.status(500).json({
+            error: err.message || 'Ошибка при удалении пользователя'
+        });
     }
 };
 

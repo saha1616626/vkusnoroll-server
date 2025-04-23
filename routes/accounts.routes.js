@@ -22,8 +22,11 @@ router.get('/employees/:id/active-chats', accountsController.checkActiveChats); 
 router.delete('/employees/:id', accountsController.deleteEmploye); // Удаление сотрудника
 router.put('/employees/:id', accountsController.updateEmploye);
 
+
 // Маршруты для пользователей (админ часть)
 router.get('/clients', accountsController.getClients);
+router.put('/clients/:id', accountsController.updateClient);
+router.delete('/clients/:id', accountsController.deleteClient);
 
 // TODO добавить запросы в отдельный файл (новые и старые из контроллера)
 

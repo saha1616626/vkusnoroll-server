@@ -161,3 +161,12 @@ UPDATE chat
   SET "isChatAccepted" = false 
   WHERE "accountId" = $1 AND "isChatOver" = false
 `;
+
+// Обновление клиентского аккаунта (админ часть)
+exports.updateClientQuery = `
+  UPDATE account 
+  SET 
+    "isAccountTermination" = $1
+  WHERE id = $2
+  RETURNING *;
+`;
