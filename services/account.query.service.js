@@ -24,6 +24,15 @@ SELECT
   JOIN role r ON a."roleId" = r.id
 `;
 
+// Обновление email учетной записи
+exports.updateEmailQuery = `
+  UPDATE account 
+  SET 
+    email = $1
+  WHERE id = $2
+  RETURNING *;
+`;
+
 // Получаем учетную запись по id
 exports.getAccountByIdQuery = `
   ${exports.getAccountsQuery}
@@ -55,6 +64,23 @@ exports.createEmployeQuery = `
   RETURNING *
 `;
 
+// Обновление сотрудника
+exports.updateEmployeQuery = `
+UPDATE account SET
+  "roleId" = $1,
+  name = $2,
+  surname = $3,
+  patronymic = $4,
+  email = $5,
+  "numberPhone" = $6,
+  login = $7,
+  "isAccountTermination" = $8,
+  "isOrderManagementAvailable" = $9, 
+  "isMessageCenterAvailable" = $10
+  WHERE id = $11
+  RETURNING *
+`;
+
 // Получаем список всех учетных записей пользователей
 exports.getClientsQuery = `
     ${exports.getAccountsQuery}
@@ -83,13 +109,12 @@ VALUES ($1, $2, $3, NOW(), false)
 RETURNING *
 `;
 
-// Проверка уникальности Email для данной роли
+// Поверка уникальности Email во всей системе
 exports.checkEmailForUniqueGivenRoleQuery = `
   SELECT EXISTS(
     SELECT 1 
     FROM account 
-    WHERE email = $1 
-      AND "roleId" = $2
+    WHERE email = $1
   ) AS "emailExists";
 `;
 
@@ -108,7 +133,7 @@ UPDATE account
 SET "confirmationСode" = $1, 
     "dateTimeСodeCreation" = NOW() 
 WHERE id = $2 
-RETURNING email
+RETURNING email, "dateTimeСodeCreation"
 `;
 
 // Проверка код подтверждения отправленного на email

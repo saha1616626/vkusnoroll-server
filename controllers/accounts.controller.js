@@ -3,6 +3,7 @@
 const pool = require('../config/db'); // Подключение к БД
 const {
     getAccountsQuery,
+    updateEmailQuery,
     getAccountByIdQuery,
     getEmployeesQuery,
     createEmployeQuery,
@@ -14,7 +15,8 @@ const {
     installingEmailConfirmationCodeQuery,
     verificationConfirmationCodeQuery,
     checkUserActiveСhatsQuery,
-    updatingChatsAfterAccountDeletion
+    updatingChatsAfterAccountDeletion,
+    updateEmployeQuery
 } = require('../services/account.query.service'); // Запросы
 const mailService = require('../services/mail/mail.service'); // Подключение к почтовому серверу
 const crypto = require('crypto'); // Модуль crypto
@@ -44,6 +46,41 @@ exports.getAccountById = async (req, res) => {
     }
 };
 
+// Обновление email учетной записи
+exports.updateEmail = async (req, res) => {
+    const { email } = req.body;
+    try {
+        // Проверка уникальности Email во всей системе за исключением текущего обновляемого пользователя
+        const checkResult = await pool.query(`
+            SELECT EXISTS(
+                SELECT 1 
+                FROM account 
+                WHERE email = $1 AND id != $2
+            ) AS "emailExists";`,
+            [email, req.params.id]
+        );
+
+        if (checkResult.rows[0].emailExists) {
+            return res.status(400).json({
+                error: 'Email уже используется'
+            });
+        }
+
+        // Обновление сотрудника
+        const { rows } = await pool.query(updateEmailQuery, [
+            email,
+            req.params.id
+        ]);
+
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            error: 'Ошибка сервера при обновлении сотрудника'
+        });
+    }
+};
+
 // Получение полного списка сотрудников
 exports.getEmployees = async (req, res) => {
     try {
@@ -61,15 +98,15 @@ exports.createEmploye = async (req, res) => {
 
     const { email, roleId, login } = req.body;
     try {
-        // Проверка уникальности Email для роли
+        // Поверка уникальности Email во всей системе
         const checkResult = await pool.query(
             checkEmailForUniqueGivenRoleQuery,
-            [email, roleId]
+            [email]
         );
 
         if (checkResult.rows[0].emailExists) {
             return res.status(400).json({
-                error: 'Email уже используется для этой роли'
+                error: 'Email уже используется'
             });
         }
 
@@ -93,7 +130,7 @@ exports.createEmploye = async (req, res) => {
             req.body.patronymic,
             email,
             req.body.numberPhone,
-            req.body.login,
+            login,
             hashedPassword,
             req.body.isAccountTermination,
             req.body.isOrderManagementAvailable,
@@ -105,6 +142,66 @@ exports.createEmploye = async (req, res) => {
         console.error(err);
         res.status(500).json({
             error: 'Ошибка сервера при создании сотрудника'
+        });
+    }
+};
+
+// Обновление учетной записи
+exports.updateEmploye = async (req, res) => {
+
+    const { email, roleId, login } = req.body;
+    try {
+        // Проверка уникальности Email во всей системе за исключением текущего обновляемого пользователя
+        const checkResult = await pool.query(`
+            SELECT EXISTS(
+                SELECT 1 
+                FROM account 
+                WHERE email = $1 AND id != $2
+            ) AS "emailExists";`,
+            [email, req.params.id]
+        );
+
+        if (checkResult.rows[0].emailExists) {
+            return res.status(400).json({
+                error: 'Email уже используется'
+            });
+        }
+
+        // Проверка уникальности логина за исключением текущего обновляемого пользователя
+        const checkLoginResult = await pool.query(`
+            SELECT EXISTS(
+                SELECT 1 
+                FROM account 
+                WHERE login = $1 AND id != $2
+            ) AS "loginExists";
+            `,
+            [login, req.params.id]
+        );
+
+        if (checkLoginResult.rows[0].loginExists) {
+            return res.status(400).json({ error: 'Логин уже используется' });
+        }
+
+        // Обновление сотрудника
+        const { rows } = await pool.query(updateEmployeQuery, [
+            roleId,
+            req.body.name,
+            req.body.surname,
+            req.body.patronymic,
+            email,
+            req.body.numberPhone,
+            login,
+            req.body.isAccountTermination,
+            req.body.isOrderManagementAvailable,
+            req.body.isMessageCenterAvailable,
+            req.params.id
+        ]);
+
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({
+            error: 'Ошибка сервера при обновлении сотрудника'
         });
     }
 };
@@ -157,7 +254,7 @@ exports.deleteEmploye = async (req, res) => {
         });
     } finally {
         client.release();
-    } 
+    }
 };
 
 // Отправка кода подтверждения на Email. Подтверждение почты сотрудника
@@ -185,7 +282,7 @@ exports.sendEmployeeСonfirmationСodeEmail = async (req, res) => {
         // }
 
         await client.query('COMMIT');
-        res.json({ success: true });
+        res.json({ success: true, dateTimeСodeCreation: updateResult.rows[0]?.dateTimeСodeCreation });
     } catch (err) {
         await client.query('ROLLBACK'); // Откат при ошибке
         res.status(500).json({

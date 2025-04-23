@@ -7,6 +7,7 @@ const authMiddleware = require('../middleware/auth.middleware'); // Провер
 
 // Общие маршруты
 router.get('/user/:id', accountsController.getAccountById);
+router.put('/user/:id', accountsController.updateEmail);
 
 // Маршруты для клиента (пользовательская часть)
 router.patch('/buyer/:id', authMiddleware, accountsController.updateAccountBuyer); // Обновление данных в личном кабинете
@@ -19,6 +20,7 @@ router.post('/employees/:id/send-code', accountsController.sendEmployeeСonfirma
 router.post('/employees/:id/verify-code', accountsController.verifyEmployeeСonfirmationСodeEmail); // Проверка кода подтверждения
 router.get('/employees/:id/active-chats', accountsController.checkActiveChats); // Количество незавершенных чатов у выбранного пользователя
 router.delete('/employees/:id', accountsController.deleteEmploye); // Удаление сотрудника
+router.put('/employees/:id', accountsController.updateEmploye);
 
 // Маршруты для пользователей (админ часть)
 router.get('/clients', accountsController.getClients);
