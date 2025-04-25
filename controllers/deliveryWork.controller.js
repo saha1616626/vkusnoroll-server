@@ -211,14 +211,16 @@ exports.getDeliveryTimeByDate = async (req, res) => {
 // Получение актуального времени доставки
 exports.getCurrentDeliveryTime = async (req, res) => {
     try {
+        const client = await pool.connect();
+
         // Получаем текущую дату в часовом поясе БД
-        const { rows: currentDateRows } = await pool.query(
+        const { rows: currentDateRows } = await client.query(
             `SELECT CURRENT_DATE AS "currentDate"`
         );
-        const currentDate = currentDateRows[0].currentDate.toISOString();
+        const currentDate = currentDateRows[0].currentDate;
 
         // Поиск расписания для текущей даты
-        const { rows: scheduleRows } = await pool.query(
+        const { rows: todaySchedule } = await client.query(
             `SELECT 
                 "isWorking",
                 "startDeliveryWorkTime" AS "start", 
@@ -228,48 +230,71 @@ exports.getCurrentDeliveryTime = async (req, res) => {
             [currentDate]
         );
 
-        // Если найдено специальное расписание
-        if (scheduleRows.length > 0) {
+        // Если сегодня рабочий день (явно указан или подразумевается)
+        if (todaySchedule.length === 0 || todaySchedule[0].isWorking) {
+            const { rows: defaultTime } = await client.query(`
+                SELECT value->>'start' AS start, 
+                value->>'end' AS end 
+                FROM "appSetting" 
+                WHERE key = 'delivery_default_time'`
+            );
+
+            client.release();
             return res.json({
-                isWorking: scheduleRows[0].isWorking,
-                start: scheduleRows[0].start,
-                end: scheduleRows[0].end,
-                isCustom: true
+                isWorking: true,
+                start: todaySchedule[0]?.start || defaultTime[0]?.start || '10:00',
+                end: todaySchedule[0]?.end || defaultTime[0]?.end || '22:00',
+                nextWorkDate: null
             });
         }
 
-        // Получение стандартного времени
-        const { rows: defaultTimeRows } = await pool.query(
-            `SELECT 
-                value->>'start' AS start, 
-                value->>'end' AS end 
-            FROM "appSetting" 
-            WHERE key = 'delivery_default_time'`
-        );
+        // Поиск следующего рабочего дня
+        let nextDate = new Date(currentDate);
+        let nextWorkDate = null; // Следующий день рабочий
+        let nextStartTime = null; // Начальное время следующего рабочего дня
 
-        // Возвращаем результат
-        if (defaultTimeRows.length > 0) {
-            return res.json({
-                isWorking: true,
-                start: defaultTimeRows[0].start,
-                end: defaultTimeRows[0].end,
-                isCustom: false
-            });
+        for (let i = 0; i < 365; i++) { // Проверяем на год вперед
+            nextDate.setDate(nextDate.getDate() + 1); // К текущей дате +1 день
+            const dateString = nextDate.toISOString().split('T')[0];
+
+            // Проверка статуса дня в БД
+            const { rows: nextDaySchedule } = await client.query(`
+                SELECT "isWorking", "startDeliveryWorkTime" AS start 
+                FROM "deliveryWork" 
+                WHERE date = $1`,
+                [dateString]
+            );
+
+            // Если день не найден - используем стандартное время
+            if (nextDaySchedule.length === 0) {
+                const { rows: defaultTime } = await client.query(`
+                    SELECT value->>'start' AS start 
+                    FROM "appSetting" 
+                    WHERE key = 'delivery_default_time'`
+                );
+                nextWorkDate = dateString;
+                nextStartTime = defaultTime[0]?.start || '10:00';
+                break;
+            }
+
+            // Если найден рабочий день
+            if (nextDaySchedule[0].isWorking) {
+                nextWorkDate = dateString;
+                nextStartTime = nextDaySchedule[0].start;
+                break;
+            }
         }
 
         // Значение по умолчанию если ничего не найдено
+        client.release();
         res.json({
-            isWorking: true,
-            start: '10:00',
-            end: '22:00',
-            isCustom: false
+            isWorking: false,
+            nextWorkDate,
+            nextStartTime
         });
 
     } catch (error) {
-        console.error('Ошибка получения времени доставки:', error);
-        res.status(500).json({
-            error: 'Не удалось получить время доставки',
-            details: error.message
-        });
+        console.error('Ошибка:', error);
+        res.status(500).json({ error: error.message });
     }
 };
