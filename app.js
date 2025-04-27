@@ -44,14 +44,31 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 const allowedOrigins = [
     'http://localhost:3000', // Admin
     'http://localhost:3001', // Manager
-    'http://localhost:3002',  // Restaurant
-    'http://localhost:3003'
+    'http://localhost:3002', // Restaurant
+    'http://localhost:3003'  // Дополнительный клиент
 ];
 
 app.use(cors({
+    origin: (origin, callback) => {
+        // Разрешить запросы без origin (для Postman и др)
+        if (!origin) {
+            console.log('Запрос без origin (тестовый)');
+            return callback(null, true);
+        }
+        
+        if (allowedOrigins.includes(origin)) {
+            console.log(`Разрешен запрос от: ${origin}`);
+            callback(null, true);
+        } else {
+            console.log(`Заблокирован запрос от: ${origin}`);
+            callback(new Error('Доступ запрещен политикой CORS'));
+        }
+    },
     origin: allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    credentials: true, // Разрешить передачу кук и заголовков авторизации
+    optionsSuccessStatus: 200 // Для старых браузеров
 }));
 
 app.use(express.json());
