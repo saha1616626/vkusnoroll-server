@@ -9,4 +9,6 @@ router.get('/', deliverySettingsController.getSettings); // Получить в�
 // Предоставляем доступ к сохранению только авторизованному пользователю
 router.post('/', authMiddleware, deliverySettingsController.saveSettings); // Обновить все настройки доставки
 
+router.get('/delivery-zones', deliverySettingsController.getDeliveryZones); // Получить все зоны доставки
+
 module.exports = router;

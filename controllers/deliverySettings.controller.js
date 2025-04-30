@@ -106,3 +106,39 @@ exports.saveSettings = async (req, res) => {
         client.release();
     }
 };
+
+// Получить все зоны доставки
+exports.getDeliveryZones = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Получаем необходимые настройки
+        const keys = [
+            'delivery_zones'
+        ];
+
+        const { rows } = await client.query(
+            `SELECT key, value FROM "appSetting" WHERE key = ANY($1)`,
+            [keys]
+        );
+
+        // Формируем результат с дефолтными значениями
+        const settings = rows.reduce((acc, row) => {
+            acc[row.key] = row.value;
+            return acc;
+        }, {});
+
+        const result = {
+            zones: settings.delivery_zones?.zones || []
+        };
+
+        await client.query('COMMIT');
+        res.json(result);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Ошибка загрузки настроек' });
+    } finally {
+        client.release();
+    }
+}

@@ -15,6 +15,7 @@ const orderStatusesRoutes = require('./routes/orderStatuses.routes.js');
 const chatRoutes = require('./routes/chat.routes.js');
 const deliveryWorkRoutes = require('./routes/deliveryWork.routes.js');
 const deliverySettingsRoutes = require('./routes/deliverySettings.routes.js'); 
+const deliveryAddressesRoutes = require('./routes/deliveryAddresses.routes.js'); 
 
 const app = express();
 
@@ -85,6 +86,7 @@ app.use('/api/cart', cartRoutes); // Корзина
 app.use('/api/orderStatuses', orderStatusesRoutes); // Статусы заказов
 app.use('/api/deliveryWork', deliveryWorkRoutes); // Рабочее время ресторана
 app.use('/api/deliverySettings', deliverySettingsRoutes); // Настройка доставки ресторана
+app.use('/api/deliveryAddresses', deliveryAddressesRoutes); // Список адресов доставки
 // app.use('/api/chat', chatRoutes); // Чаты
 
 // Обработка ошибок
