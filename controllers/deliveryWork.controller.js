@@ -84,7 +84,7 @@ exports.updateRestaurantWorkingTime = async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({
-            error: 'Ошибка сервера при создании элемента графика рабочего времени'
+            error: 'Ошибка сервера при обновлении элемента графика рабочего времени'
         });
     }
 }
