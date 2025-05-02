@@ -16,6 +16,12 @@ SELECT
 FROM "deliveryAddress"
 `;
 
+// Получить адрес по id
+exports.getDeliveryAddressByIdQuery = `
+    ${exports.getDeliveryAddressesQuery}
+    WHERE id = $1
+`;
+
 // Получить список адресов клиента
 exports.getDeliveryAddressesByIdClientQuery = `
     ${exports.getDeliveryAddressesQuery}

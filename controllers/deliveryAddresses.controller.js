@@ -3,6 +3,7 @@
 const pool = require('../config/db'); // Подключение к БД
 const {
     getDeliveryAddressesQuery,
+    getDeliveryAddressByIdQuery,
     getDeliveryAddressesByIdClientQuery,
     checkingCountUserAddressesQuery,
     createDeliveryAddressQuery,
@@ -20,6 +21,19 @@ exports.getDeliveryAddressesByIdClient = async (req, res) => {
         res.json(rows); // Успешно
     } catch (err) {
         res.status(500).json({ error: 'Ошибка загрузки адресов доставки' });
+    }
+}
+
+// Получить адрес по id
+exports.getDeliveryAddressById = async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            getDeliveryAddressByIdQuery,
+            [req.params.id]);
+
+        res.json(rows); // Успешно
+    } catch(err) {
+        res.status(500).json({ error: 'Ошибка загрузки адреса доставки' });
     }
 }
 
