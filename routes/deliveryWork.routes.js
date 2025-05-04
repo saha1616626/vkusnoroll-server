@@ -10,6 +10,8 @@ router.get('/current', deliveryWorkController.getCurrentDeliveryTime); // Пол
 router.get('/default-time', deliveryWorkController.getDefaultWorkingTime);
 router.post('/default-time', deliveryWorkController.updateDefaultWorkingTime);
 
+router.get('/next-seven-days', deliveryWorkController.getNextSevenDaysSchedule); // Получить график работы на следующие 7 дней
+
 router.get('/', deliveryWorkController.getListRestaurantWorkingTime);
 router.get('/:id', deliveryWorkController.getDeliveryTimeByDate);
 router.post('/', deliveryWorkController.createRestaurantWorkingTime);

@@ -298,3 +298,74 @@ exports.getCurrentDeliveryTime = async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 };
+
+// Получить график работы на следующие 7 дней
+exports.getNextSevenDaysSchedule = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Получаем текущую дату сервера
+        const { rows: dateRows } = await client.query(`SELECT CURRENT_DATE AT TIME ZONE 'Europe/Moscow' AS "currentDate"`);
+        const currentDate = new Date(dateRows[0].currentDate); // Уже учтен часовой пояс БД
+
+        // Форматирование локального времени
+        const formatLocalDate = (date) => {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0'); // Месяцы 0-11
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+
+        // Формируем массив из 7 дней
+        const dates = [];
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(currentDate);
+            date.setDate(date.getDate() + i);
+            dates.push(formatLocalDate(date));
+        }
+
+        // Получаем специальные даты из deliveryWork
+        const { rows: scheduleRows } = await client.query(
+            `SELECT 
+                date::text AS date, 
+                "isWorking", 
+                "startDeliveryWorkTime" AS start,
+                "endDeliveryWorkTime" AS end 
+             FROM "deliveryWork" 
+             WHERE date::text = ANY($1)`,
+            [dates]
+        );
+
+        // Получаем стандартное время
+        const { rows: defaultTime } = await client.query(`
+            SELECT value->>'start' AS start, 
+                   value->>'end' AS end 
+            FROM "appSetting" 
+            WHERE key = 'delivery_default_time'`
+        );
+
+        // Формируем результат. Устанавливаем стандартное время там, где не указано специальное
+        const result = dates.map(date => { // Проходимся по массиву из 7 дней
+            const schedule = scheduleRows.find(r => r.date === date); // Ищем специальную дату для определенного дня в массиве
+            return { // Если найдена специальная дата, то устанавливаются ее значения, а если нет, то берутся значения по умолчанию
+                date,
+                isWorking: schedule ? schedule.isWorking : true, // По умолчанию работает
+                start: (schedule?.start ? schedule.start.slice(0, 5) : defaultTime[0]?.start) || '10:00',
+                end: (schedule?.end ? schedule.end.slice(0, 5) : defaultTime[0]?.end) || '22:00',
+            };
+        });
+
+        await client.query('COMMIT');
+        res.json(result); // Возвращаем массив дат
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Ошибка получения расписания:', error);
+        res.status(500).json({
+            error: 'Не удалось получить расписание',
+            details: error.message
+        });
+    } finally {
+        client.release();
+    }
+};

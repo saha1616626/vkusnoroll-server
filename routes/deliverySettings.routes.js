@@ -10,5 +10,6 @@ router.get('/', deliverySettingsController.getSettings); // Получить в�
 router.post('/', authMiddleware, deliverySettingsController.saveSettings); // Обновить все настройки доставки
 
 router.get('/delivery-zones', deliverySettingsController.getDeliveryZones); // Получить все зоны доставки
+router.get('/order-settings', deliverySettingsController.getOrderSettings); // Получаем все необходимые данные для формирования заказа
 
 module.exports = router;

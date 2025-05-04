@@ -142,3 +142,52 @@ exports.getDeliveryZones = async (req, res) => {
         client.release();
     }
 }
+
+// Получаем все необходимые данные для формирования заказа
+exports.getOrderSettings = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // Получаем настройки
+        const keys = [
+            'delivery_default_price',
+            'delivery_is_free',
+            'delivery_free_threshold',
+            'delivery_interval'
+        ];
+
+        const settingsQuery = await client.query(
+            `SELECT key, value FROM "appSetting" WHERE key = ANY($1)`,
+            [keys]
+        );
+
+        // Получаем текущее время из БД
+        const timeQuery = await client.query(`
+            SELECT NOW() AT TIME ZONE 'Europe/Moscow' as server_time
+        `);
+        const serverTime = timeQuery.rows[0].server_time.toISOString();
+
+        // Формируем ответ
+        const settings = settingsQuery.rows.reduce((acc, row) => {
+            acc[row.key] = row.value?.value;
+            return acc;
+        }, {});
+
+        const result = {
+            defaultPrice: settings.delivery_default_price || 300,
+            isFreeDelivery: settings.delivery_is_free || false,
+            freeThreshold: settings.delivery_free_threshold || 0,
+            interval: settings.delivery_interval || 30,
+            serverTime // Время из PostgreSQL
+        };
+
+        await client.query('COMMIT');
+        res.json(result);
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Ошибка загрузки настроек' });
+    } finally {
+        client.release();
+    }
+};
