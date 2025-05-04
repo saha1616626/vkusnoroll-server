@@ -68,7 +68,9 @@ exports.createDeliveryAddress = async (req, res) => {
             req.body.entrance,
             req.body.floor,
             req.body.comment,
-            req.body.isPrivateHome
+            req.body.isPrivateHome,
+            req.body.latitude,
+            req.body.longitude
         ]);
 
         res.status(201).json(rows[0]);
@@ -93,6 +95,8 @@ exports.updateDeliveryAddress = async (req, res) => {
             req.body.floor,
             req.body.comment,
             req.body.isPrivateHome,
+            req.body.latitude,
+            req.body.longitude,
             req.params.id
         ]);
 

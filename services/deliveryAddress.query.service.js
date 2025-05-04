@@ -12,7 +12,9 @@ SELECT
     entrance, 
     floor, 
     comment, 
-    "isPrivateHome"
+    "isPrivateHome",
+    latitude,
+    longitude
 FROM "deliveryAddress"
 `;
 
@@ -47,8 +49,10 @@ exports.createDeliveryAddressQuery = `
     entrance, 
     floor, 
     comment, 
-    "isPrivateHome")
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    "isPrivateHome",
+    latitude,
+    longitude)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
   RETURNING *
 `;
 
@@ -62,8 +66,10 @@ UPDATE "deliveryAddress" SET
     entrance = $5, 
     floor = $6, 
     comment = $7, 
-    "isPrivateHome" = $8
-  WHERE id = $9
+    "isPrivateHome" = $8,
+    latitude = $9,
+    longitude = $10
+  WHERE id = $11
   RETURNING *
 `;
 
