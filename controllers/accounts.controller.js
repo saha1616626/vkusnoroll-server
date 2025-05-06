@@ -382,7 +382,7 @@ exports.updateAccountBuyer = async (req, res) => {
         // Обновление данных
         const { rows } = await pool.query(updateAccountBuyerQuery, [
             name,
-            numberPhone,
+            numberPhone || null,
             id
         ]);
 

@@ -27,8 +27,76 @@ exports.deleteOrders = async (req, res) => {
 
 // Получить список заказов клиента
 exports.getOrdersByIdClient = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
 
-}
+        // Получаем основные данные заказов
+        const ordersQuery = `
+            SELECT id, "orderNumber", "orderPlacementTime", 
+                   "startDesiredDeliveryTime", "endDesiredDeliveryTime", 
+                   "accountId", "deliveryAddressId", "orderStatusForClient", 
+                   "shippingCost", "goodsCost", "paymentMethod", 
+                   "isPaymentStatus", "prepareChangeMoney", 
+                   "commentFromClient", "nameClient", "numberPhoneClient"
+            FROM "order"
+            WHERE "accountId" = $1
+            ORDER BY "orderPlacementTime" DESC
+        `;
+        const ordersResult = await client.query(ordersQuery, [req.params.accountId]);
+        const orders = ordersResult.rows;
+
+        if (orders.length === 0) { // Если список заказов пуст, то возвращаем пустой массив
+            await client.query('COMMIT'); // Фиксируем успешное завершение транзакции
+            return res.json([]);
+        }
+
+        // Получаем адреса доставки и состав заказов для каждого заказа
+        const enhancedOrders = [];
+
+        for (const order of orders) {
+            // Получаем адрес доставки
+            const addressQuery = `
+                SELECT id, "accountId", city, street, house, 
+                       apartment, entrance, floor, comment, 
+                       "isPrivateHome", latitude, longitude
+                FROM "deliveryAddress"
+                WHERE id = $1
+            `;
+            const addressResult = await client.query(addressQuery, [order.deliveryAddressId]);
+
+            // Получаем состав заказа с названиями блюд
+            const compositionQuery = `
+                SELECT co."dishId", co."quantityOrder", 
+                       co."pricePerUnit", d.name as "dishName"
+                FROM "compositionOrder" co
+                JOIN dish d ON co."dishId" = d.id
+                WHERE co."orderId" = $1
+            `;
+            const compositionResult = await client.query(compositionQuery, [order.id]);
+
+            // Собираем расширенный объект заказа
+            enhancedOrders.push({
+                ...order,
+                deliveryAddress: addressResult.rows[0],
+                items: compositionResult.rows
+            });
+        }
+
+        await client.query('COMMIT'); // Фиксируем успешное завершение транзакции
+        res.json(enhancedOrders);
+
+    } catch (error) {
+        await client.query('ROLLBACK');  // Откат транзакции
+        console.error('Transaction error:', error);
+        res.status(500).json({
+            error: 'Ошибка при получении заказов',
+            details: error.message
+        });
+    } finally {
+        client.release(); // Освобождаем клиента
+    }
+};
 
 // Оформление заказа клиентом 
 exports.createOrderClient = async (req, res) => {
@@ -56,7 +124,7 @@ exports.createOrderClient = async (req, res) => {
             req.body.address.coordinates[0],
             req.body.address.coordinates[1]
         ];
-        
+
         const addressResult = await client.query(addressQuery, addressValues); // Запрос
         const deliveryAddressId = addressResult.rows[0].id; // Получаем Id адреса
 
@@ -75,7 +143,7 @@ exports.createOrderClient = async (req, res) => {
             )
             RETURNING id, "orderNumber"
         `;
-        
+
         const orderValues = [
             req.body.startDesiredDeliveryTime,
             req.body.endDesiredDeliveryTime,
@@ -87,8 +155,8 @@ exports.createOrderClient = async (req, res) => {
             req.body.isPaymentStatus,
             req.body.prepareChangeMoney || null,
             req.body.commentFromClient || null,
-            req.body.nameClient,
-            req.body.numberPhoneClient
+            req.body.nameClient || null,
+            req.body.numberPhoneClient || null
         ];
 
         const orderResult = await client.query(orderQuery, orderValues); // Запрос
@@ -129,7 +197,7 @@ exports.createOrderClient = async (req, res) => {
         }
 
         await client.query('COMMIT'); // Фиксируем успешное завершение транзакции
-        
+
         res.status(201).json({
             success: true,
             orderId,
@@ -144,6 +212,6 @@ exports.createOrderClient = async (req, res) => {
             details: error.message
         });
     } finally {
-        client.release();
+        client.release(); // Освобождаем клиента
     }
 };
