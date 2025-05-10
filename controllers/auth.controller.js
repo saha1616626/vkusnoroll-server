@@ -106,6 +106,16 @@ exports.loginManager = async (req, res) => {
             return res.status(403).json({ error: 'Доступ запрещен' });
         }
 
+        // Проверка блокировки учетной записи
+        if(user.isAccountTermination) {
+            return res.status(403).json({ error: 'Учетная запись заблокирована' });
+        }
+
+        // Проверка подтверждения учетной записи
+        if(!user.isEmailConfirmed) {
+            return res.status(403).json({ error: 'Учетная запись не подтверждена, обращайтесь к администратору' });
+        }
+
         // Генерация токена. JWT_SECRET - секретный ключ для подписи токена
         const token = jwt.sign(
             { userId: user.id, role: user.role }, // Полезная нагрузка токена (payload)

@@ -301,7 +301,7 @@ exports.createOrderClient = async (req, res) => {
                 NOW(), $1, $2, $3, $4, 
                 'Создан', $5, $6, $7, $8, $9, $10, $11, $12
             )
-            RETURNING id, "orderNumber"
+            RETURNING id, "orderNumber", "orderPlacementTime"
         `;
 
         const orderValues = [
@@ -360,7 +360,7 @@ exports.createOrderClient = async (req, res) => {
 
         try {
             // После успешного создания заказа передаём менеджеру уведомление
-            broadcastNewOrder(`VR-${orderId}`);
+            broadcastNewOrder(orderId, `VR-${orderId}`, orderResult.rows[0].orderPlacementTime);
         } catch (error) {}
 
         res.status(201).json({

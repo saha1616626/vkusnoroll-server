@@ -28,6 +28,21 @@ const generateConfirmationCode = () => {
     return crypto.randomInt(100000, 999999); // 6-значный код
 };
 
+// Получение учетной записи по ID для WebSocket 
+exports.getAccountByIdForWebSocket = async (userId) => {
+    const { rows } = await pool.query(`SELECT 
+    a.id, 
+    a.name, 
+    r.name as role, 
+    a."isOrderManagementAvailable",
+    a."isMessageCenterAvailable"
+    FROM account a 
+    JOIN role r ON a."roleId" = r.id
+    WHERE a.id = $1`,
+        [userId]);
+    return rows[0] || null;
+};
+
 // Получение учетной записи по ID
 exports.getAccountById = async (req, res) => {
     try {
