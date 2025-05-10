@@ -1,9 +1,169 @@
 // Контроллер для работы с заказами 
 
 const pool = require('../config/db'); // Подключение к БД
+const {broadcastNewOrder} = require('./../websocket'); // Метод Websocket
 const {
-
 } = require('../services/orders.query.service'); // Запросы
+
+// Получить список всех заказов с пагинацией
+exports.getAllOrders = async (req, res) => {
+    try {
+        // Извлекаем параметры фильтрации
+        const {
+            page = 1,
+            limit = 100,
+            sort,
+            orderStatus,
+            isPaymentStatus,
+            paymentMethod,
+            date,
+            search
+        } = req.query; // Пагинация
+
+        const offset = (page - 1) * limit;
+
+        // Валидация параметров пагинации
+        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
+            return res.status(400).json({ error: 'Некорректные параметры пагинации' });
+        }
+
+        // Базовая часть запроса и условия фильтрации
+        let baseQuery = `
+            FROM "order" o
+            LEFT JOIN "orderStatus" os ON o."orderStatusId" = os.id
+            LEFT JOIN "deliveryAddress" da ON o."deliveryAddressId" = da.id
+            WHERE 1 = 1
+        `;
+
+        const queryParams = [];
+        let paramCounter = 1; // Счетчик параметров
+
+        // Фильтрация по дате оформления
+        if (date?.start) {
+            baseQuery += ` AND o."orderPlacementTime" >= $${paramCounter++}`;
+            queryParams.push(new Date(date.start));
+        }
+        if (date?.end) {
+            baseQuery += ` AND o."orderPlacementTime" <= $${paramCounter++}`;
+            queryParams.push(new Date(date.end));
+        }
+
+        // Фильтрация по статусам
+        const orderStatusIds = orderStatus?.map(status => status.id); // Получаем массив id статусов
+
+        if (orderStatusIds?.length > 0) {
+            // Если есть статус с id === null, то отделяем его
+            const nullIncluded = orderStatusIds.includes('null');
+            const idsWithoutNull = orderStatusIds.filter(id => id !== 'null');
+
+            let conditions = []; // Собираем запрос из условий
+
+            if (nullIncluded) {
+                // Ищем заказы со статусом NULL
+                conditions.push(`o."orderStatusId" IS NULL `);
+            }
+
+            if (idsWithoutNull.length > 0) {
+                // Ищем по другим статусам
+                conditions.push(`o."orderStatusId" = ANY($${paramCounter++}::integer[]) `);
+                queryParams.push(idsWithoutNull);
+            }
+
+            // Добавляем условие, если есть
+            if (conditions.length > 0) {
+                baseQuery += ' AND ' + '(' + conditions.join(' OR ') + ')';
+            }
+
+        }
+
+        // Фильтр по статусу оплаты
+        if (isPaymentStatus) {
+            baseQuery += ` AND o."isPaymentStatus" = $${paramCounter++}`;
+            queryParams.push(isPaymentStatus === 'Оплачен');
+        }
+
+        // Фильтрация по методу оплаты
+        const orderPaymentMethods = paymentMethod?.map(status => status.name); // Получаем массив name
+
+        if (orderPaymentMethods?.length > 0) {
+            baseQuery += ` AND o."paymentMethod" = ANY($${paramCounter++}::text[]) `;
+            queryParams.push(orderPaymentMethods);
+        }
+
+        // Фильтация по запросу
+        if (search) {
+            baseQuery += ` AND o."orderNumber" ILIKE '%' || $${paramCounter++} || '%'`;
+            queryParams.push(search);
+        }
+
+        // Запрос ДЛЯ ПОДСЧЁТА количества (без LIMIT/OFFSET)
+        const countQuery = `
+            SELECT COUNT(*) as total
+            ${baseQuery}
+        `;
+
+        // Фильрация по датам
+        if (sort?.type && sort?.order) {
+            if (sort.type === 'deliveryDate') baseQuery += ` ORDER BY "endDesiredDeliveryTime" ${sort.order} `;
+            if (sort.type === 'orderDate') baseQuery += ` ORDER BY "orderPlacementTime" ${sort.order} `;
+        }
+
+        // Запрос ДЛЯ ДАННЫХ (с LIMIT и OFFSET)
+        const dataQuery = `
+            SELECT 
+                o.*,
+                os.name as "statusName",
+                os."sequenceNumber",
+                os."isFinalResultPositive",
+                os."isAvailableClient",
+                da.city,
+                da.street,
+                da.house,
+                da.apartment
+            ${baseQuery}
+            LIMIT $${paramCounter++} OFFSET $${paramCounter++}
+        `;
+
+        // Добавляем LIMIT и OFFSET в параметры
+        queryParams.push(parseInt(limit), parseInt(offset));
+
+        // Выполняем оба запроса параллельно
+        const [countResult, ordersResult] = await Promise.all([
+            pool.query(countQuery, queryParams.slice(0, -2)), // Исключаем LIMIT и OFFSET
+            pool.query(dataQuery, queryParams)
+        ]);
+
+        const total = parseInt(countResult.rows[0].total); // Кол-во строк без LIMIT и OFFSET
+
+        res.json({
+            total,
+            currentPage: parseInt(page),
+            limit: parseInt(limit),
+            data: ordersResult.rows.map(order => ({
+                ...order,
+                deliveryAddress: {
+                    city: order.city,
+                    street: order.street,
+                    house: order.house,
+                    apartment: order.apartment || null
+                },
+                status: order.statusName ? {
+                    name: order.statusName,
+                    sequenceNumber: order.sequenceNumber,
+                    isFinalResultPositive: order.isFinalResultPositive,
+                    isAvailableClient: order.isAvailableClient
+                } : null
+            }))
+        });
+
+    } catch (error) {
+        console.error('Ошибка при получении заказов:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
+    }
+};
 
 // Получить заказ по id
 exports.getOrderById = async (req, res) => {
@@ -43,7 +203,7 @@ exports.getOrdersByIdClient = async (req, res) => {
             WHERE "accountId" = $1
             ORDER BY "orderPlacementTime" DESC
         `;
-        const ordersResult = await client.query(ordersQuery, [req.params.accountId]);
+        const ordersResult = await client.query(ordersQuery, [req.params.id]);
         const orders = ordersResult.rows;
 
         if (orders.length === 0) { // Если список заказов пуст, то возвращаем пустой массив
@@ -197,6 +357,11 @@ exports.createOrderClient = async (req, res) => {
         }
 
         await client.query('COMMIT'); // Фиксируем успешное завершение транзакции
+
+        try {
+            // После успешного создания заказа передаём менеджеру уведомление
+            broadcastNewOrder(`VR-${orderId}`);
+        } catch (error) {}
 
         res.status(201).json({
             success: true,

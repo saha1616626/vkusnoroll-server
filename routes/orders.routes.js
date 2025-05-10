@@ -5,6 +5,7 @@ const router = express.Router();
 const ordersController = require('../controllers/orders.controller'); // Контроллер для работы с заказами
 const authMiddleware = require('../middleware/auth.middleware'); // Проверка авторизации пользователя
 
+router.get('/manager/all', authMiddleware, ordersController.getAllOrders); // Получить все заказы
 router.get('/manager/:id', ordersController.getOrderById); // Получить заказ по id
 router.put('/manager/:id', ordersController.updateOrder), // Обновить заказ
 router.post('/manager', ordersController.createOrder) // Создать заказ для клиента

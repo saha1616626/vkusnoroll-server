@@ -11,6 +11,11 @@ exports.getAdminBasedProvidedData = `
     ${exports.getUserBasedProvidedData}
     WHERE login = $1`;
 
+// Получение данных менеджера
+exports.getManagerBasedProvidedData = `
+    ${exports.getUserBasedProvidedData}
+    WHERE login = $1`;
+
 // Получение данных пользователя
 exports.getClientBasedProvidedData = `
     ${exports.getUserBasedProvidedData}

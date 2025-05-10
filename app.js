@@ -1,5 +1,7 @@
 // Основной файл node приложения
 
+process.env.TZ = 'Europe/Moscow'; // Установка часового пояса
+
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config(); // Используется для загрузки переменных окружения из файла .env. Чтобы использовать переменные без необходимости явно задавать в коде
@@ -14,9 +16,9 @@ const cartRoutes = require('./routes/cart.routes');
 const orderStatusesRoutes = require('./routes/orderStatuses.routes.js');
 const chatRoutes = require('./routes/chat.routes.js');
 const deliveryWorkRoutes = require('./routes/deliveryWork.routes.js');
-const deliverySettingsRoutes = require('./routes/deliverySettings.routes.js'); 
-const deliveryAddressesRoutes = require('./routes/deliveryAddresses.routes.js'); 
-const ordersRoutes = require('./routes/orders.routes.js'); 
+const deliverySettingsRoutes = require('./routes/deliverySettings.routes.js');
+const deliveryAddressesRoutes = require('./routes/deliveryAddresses.routes.js');
+const ordersRoutes = require('./routes/orders.routes.js');
 
 const app = express();
 
@@ -24,17 +26,25 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 
 app.use(cookieParser()); // Middleware для обработки cookies
-app.use((req, res, next) => { // Проверка токена аутентификации в cookie
-    const token = req.cookies.token; // Cоздается собственный middleware, который проверяет наличие токена в cookies
 
-    if (token) { // Если токен существует, код выполняет проверку его действительности
-        try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            req.user = decoded; // Если токен действителен, его расшифрованное содержимое (например, пользовательские данные) присваивается req.user, что позволяет этому значению быть доступным в следующих middleware и обработчиках маршрутов
-        } catch (err) {
-            res.clearCookie('token'); // Если токен недействителен (например, истек, был подделан и т. д.), возникает ошибка, и в этом случае cookie с токеном очищается 
+app.use((req, res, next) => { // Проверка токена аутентификации из cookie
+    const tokens = { // Cоздается собственный middleware, который проверяет наличие токена в cookies
+        'token': 'admin',
+        'tokenUser': 'user',
+        'tokenManager': 'manager'
+    };
+
+    Object.entries(tokens).forEach(([cookieName, userType]) => {
+        const token = req.cookies[cookieName];
+        if (token) {  // Если токен существует, код выполняет проверку его действительности
+            try {
+                const decoded = jwt.verify(token, process.env.JWT_SECRET);
+                req.user = { ...decoded, userType }; // Если токен действителен, его расшифрованное содержимое (например, пользовательские данные) присваивается req.user, что позволяет этому значению быть доступным в следующих middleware и обработчиках маршрутов
+            } catch (err) {
+                res.clearCookie(cookieName); // Если токен недействителен (например, истек, был подделан и т. д.), возникает ошибка, и в этом случае cookie с токеном очищается 
+            }
         }
-    }
+    });
 
     next(); // Позволяет передать запрос клиенту, иначе при отсутствии вызова запрос зависнет и не дойдет до клиента
 });
@@ -58,7 +68,7 @@ app.use(cors({
             console.log('Запрос без origin (тестовый)');
             return callback(null, true);
         }
-        
+
         if (allowedOrigins.includes(origin)) {
             console.log(`Разрешен запрос от: ${origin}`);
             callback(null, true);
