@@ -35,7 +35,8 @@ exports.getAccountByIdForWebSocket = async (userId) => {
     a.name, 
     r.name as role, 
     a."isOrderManagementAvailable",
-    a."isMessageCenterAvailable"
+    a."isMessageCenterAvailable",
+    a."isAccountTermination"
     FROM account a 
     JOIN role r ON a."roleId" = r.id
     WHERE a.id = $1`,
@@ -212,6 +213,9 @@ exports.updateEmploye = async (req, res) => {
             req.body.isMessageCenterAvailable,
             req.params.id
         ]);
+
+        // TODO Если аккаунт заблокирован или ограничен Центром сообщений + есть незаверешенные чаты, то необходимо открытые чаты перевести в раздел непринятых
+        // Метод updatingChatsAfterAccountDeletion не подойдет, так как нужно id заменять на Null, а при удалении сотрудника автомат выстав null
 
         res.status(201).json(rows[0]);
     } catch (err) {

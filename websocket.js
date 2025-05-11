@@ -42,13 +42,15 @@ const initWebSocket = (server) => {
         const userRole = req.user.role;
         const isOrderManagementAvailable = req.user?.isOrderManagementAvailable || false;
         const isMessageCenterAvailable = req.user?.isMessageCenterAvailable || false;
+        const isAccountTermination = req.user?.isAccountTermination || false;
 
         // Сохраняем соединение с информацией о пользователе
         activeConnections.set(userId, {
             ws,
             role: userRole,
             isOrderManagementAvailable: isOrderManagementAvailable,
-            isMessageCenterAvailable: isMessageCenterAvailable
+            isMessageCenterAvailable: isMessageCenterAvailable,
+            isAccountTermination: isAccountTermination
         });
 
         // Удаляем при закрытии
@@ -66,7 +68,8 @@ const broadcastNewOrder = (orderId, orderNumber, orderPlacementTime) => {
         if (
             connection.ws.readyState === WebSocket.OPEN && // Проверка соединения
             connection.role === 'Менеджер' && // Проврека роли
-            connection.isOrderManagementAvailable // Проверяем дотсуп к разделу с заказами
+            connection.isOrderManagementAvailable && // Проверяем дотсуп к разделу с заказами
+            !connection.isAccountTermination // Проверяем блокировку аккаунта
         ) {
             connection.ws.send(JSON.stringify({
                 type: 'NEW_ORDER',
