@@ -90,6 +90,33 @@ SELECT
   JOIN category c ON d."categoryId" = c.id
 `;
 
+// Получение списка блюд без изображения и те товары, которые не в архиве, и их категория не в архиве
+exports.getUnarchivedDishesNoImageWithActiveCategoryQuery = `
+  SELECT 
+    d.id, 
+    d.name, 
+    d.description, 
+    d."categoryId",
+    c.name as category, 
+    d."isNutritionalValue", 
+    d.calories, 
+    d.fats,
+    d.squirrels, 
+    d.carbohydrates, 
+    d."isWeight", 
+    d.weight, 
+    d."isQuantitySet", 
+    d.quantity, 
+    d."isVolume", 
+    d.volume, 
+    d.price
+FROM dish d
+JOIN category c ON d."categoryId" = c.id
+WHERE
+    d."isArchived" = false     
+    AND c."isArchived" = false
+`;
+
 // Получаем блюдо по id
 exports.getDishByIdQuery = `
   ${exports.getDishesQuery}

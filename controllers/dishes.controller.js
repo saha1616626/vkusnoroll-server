@@ -3,6 +3,7 @@
 const pool = require('../config/db'); // Подключение к БД
 const {
     getDishesQuery,
+    getUnarchivedDishesNoImageWithActiveCategoryQuery,
     getDishByIdQuery,
     createDishQuery,
     updateDishQuery,
@@ -30,6 +31,18 @@ exports.getAllDishes = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+// Получение списка блюд без изображения и те товары, которые не в архиве, и их категория не в архиве
+exports.getUnarchivedDishesNoImageWithActiveCategory = async (req, res) => {
+    try {
+        const { rows } = await pool.query(getUnarchivedDishesNoImageWithActiveCategoryQuery); // Получаем массив строк
+
+        res.json(rows);  // Успешно
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Ошибка получения блюд' });
+    }
+}
 
 // Получение блюда по ID
 exports.getDishById = async (req, res) => {

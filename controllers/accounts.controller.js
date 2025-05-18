@@ -296,10 +296,10 @@ exports.sendEmployeeСonfirmationСodeEmail = async (req, res) => {
         }
 
         // Отправка письма
-        // const { success } = await mailService.sendShiftConfirmation(email, code);
-        // if (!success) {
-        //     throw new Error('Ошибка отправки письма');
-        // }
+        const { success } = await mailService.sendShiftConfirmation(email, code);
+        if (!success) {
+            throw new Error('Ошибка отправки письма');
+        }
 
         await client.query('COMMIT');
         res.json({ success: true, dateTimeСodeCreation: updateResult.rows[0]?.dateTimeСodeCreation });
