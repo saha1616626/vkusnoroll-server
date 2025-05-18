@@ -562,10 +562,202 @@ exports.updateOrder = async (req, res) => {
     }
 }
 
+// Изменить статус заказов (массово)
+exports.changeOrderStatuses = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { orderIds, newStatusId } = req.body;
+
+        // Валидация входных данных
+        if (!Array.isArray(orderIds) || orderIds.length === 0 || !newStatusId) {
+            return res.status(400).json({ error: 'Некорректные параметры запроса' });
+        }
+
+        let orderStatusForClient = 'Создан';
+        let orderCompletionTime = null;
+        let statusIdToSet = null;
+
+        // Обработка системного статуса 'null'
+        if (newStatusId === 'null' || newStatusId === null) {
+            statusIdToSet = null;
+        } else {
+            // Получаем все статусы заказов только если это не системный статус
+            const statusQuery = `SELECT * FROM "orderStatus" ORDER BY "sequenceNumber" DESC`;
+            const statusResult = await client.query(statusQuery);
+            const allStatuses = statusResult.rows;
+
+            const newStatus = allStatuses.find(s => s.id == newStatusId);
+            if (!newStatus) {
+                return res.status(400).json({ error: 'Указан несуществующий статус' });
+            }
+
+            // Определяем параметры для обновления
+            const isFinal = newStatus.isFinalResultPositive !== null;
+            orderCompletionTime = isFinal ? 'NOW()' : null;
+
+            // Определяем статус для клиента
+            orderStatusForClient = newStatus.isAvailableClient
+                ? newStatus.name
+                : allStatuses.find(s =>
+                    s.sequenceNumber < newStatus.sequenceNumber &&
+                    s.isAvailableClient
+                )?.name || 'Создан';
+
+            statusIdToSet = newStatusId;
+        }
+
+        // Массовое обновление заказов
+        const updateQuery = `
+            UPDATE "order" SET
+                "orderStatusId" = $1,
+                "orderStatusForClient" = $2,
+                "orderCompletionTime" = ${orderCompletionTime ? 'NOW()' : 'NULL'}
+            WHERE id = ANY($3::integer[])
+            RETURNING id
+        `;
+
+        const updateResult = await client.query(updateQuery, [
+            statusIdToSet,
+            orderStatusForClient,
+            orderIds
+        ]);
+
+        // Проверяем количество обновленных записей
+        if (updateResult.rowCount !== orderIds.length) {
+            const updatedIds = updateResult.rows.map(r => r.id);
+            const missingIds = orderIds.filter(id => !updatedIds.includes(parseInt(id)));
+            console.warn('Не найдены заказы:', missingIds);
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            updated: updateResult.rowCount,
+            warnings: updateResult.rowCount !== orderIds.length
+                ? `Некоторые заказы не найдены`
+                : null
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Ошибка при массовом обновлении статусов:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
+    } finally {
+        client.release();
+    }
+}
+
+// Изменить статус оплаты заказов (массово)
+exports.changeOrderPaymentStatuses = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        const { orderIds, isPaymentStatus } = req.body;
+
+        // Валидация входных данных
+        if (!Array.isArray(orderIds) || orderIds.length === 0 || typeof isPaymentStatus !== 'boolean') {
+            return res.status(400).json({ error: 'Некорректные параметры запроса' });
+        }
+
+        // Массовое обновление заказов
+        const updateQuery = `
+            UPDATE "order" SET
+                "isPaymentStatus" = $1
+            WHERE id = ANY($2::integer[])
+            RETURNING id
+        `;
+
+        const updateResult = await client.query(updateQuery, [
+            isPaymentStatus,
+            orderIds
+        ]);
+
+        // Проверяем количество обновленных записей
+        if (updateResult.rowCount !== orderIds.length) {
+            const updatedIds = updateResult.rows.map(r => r.id);
+            const missingIds = orderIds.filter(id => !updatedIds.includes(parseInt(id)));
+            console.warn('Не найдены заказы:', missingIds);
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            updated: updateResult.rowCount,
+            warnings: updateResult.rowCount !== orderIds.length
+                ? `Некоторые заказы не найдены`
+                : null
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Ошибка при массовом обновлении статусов оплаты:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
+    } finally {
+        client.release();
+    }
+}
+
 // Удалить заказ(ы)
 exports.deleteOrders = async (req, res) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
 
-}
+        const { orderIds } = req.body;
+
+        // Валидация входных данных
+        if (!Array.isArray(orderIds) || orderIds.length === 0) {
+            return res.status(400).json({ error: 'Некорректные параметры запроса' });
+        }
+
+        // Массовое удаление заказов
+        const deleteQuery = `
+            DELETE FROM "order" 
+            WHERE id = ANY($1::integer[])
+            RETURNING id
+        `;
+
+        const deleteResult = await client.query(deleteQuery, [orderIds]);
+
+        // Проверяем количество удаленных записей
+        if (deleteResult.rowCount !== orderIds.length) {
+            const deletedIds = deleteResult.rows.map(r => r.id);
+            const missingIds = orderIds.filter(id => !deletedIds.includes(parseInt(id)));
+            console.warn('Не найдены заказы для удаления:', missingIds);
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+            success: true,
+            deleted: deleteResult.rowCount,
+            warnings: deleteResult.rowCount !== orderIds.length
+                ? `Некоторые заказы не найдены`
+                : null
+        });
+
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Ошибка при массовом удалении заказов:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
+    } finally {
+        client.release();
+    }
+};
 
 // Получить список заказов клиента
 exports.getOrdersByIdClient = async (req, res) => {
