@@ -5,6 +5,9 @@ const router = express.Router();
 const ordersController = require('../controllers/orders.controller'); // Контроллер для работы с заказами
 const authMiddleware = require('../middleware/auth.middleware'); // Проверка авторизации пользователя
 
+router.get('/report/dish', ordersController.getDishSalesReport), // Получить отчёт по продажам блюд с пагинацией, группировкой и фильтрами
+router.get('/report/order', ordersController.getOrdersReport), // Получить отчёт по заказам с пагинацией и статистикой
+
 router.put('/manager/change-payment-statuses', ordersController.changeOrderPaymentStatuses), // Изменить статус оплаты заказов
 router.put('/manager/change-status', ordersController.changeOrderStatuses), // Изменить статус заказов
 router.get('/manager/all', authMiddleware, ordersController.getAllOrders); // Получить все заказы

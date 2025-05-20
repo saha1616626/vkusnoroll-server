@@ -18,9 +18,9 @@ exports.getAllOrders = async (req, res) => {
             paymentMethod,
             date,
             search
-        } = req.query; // Пагинация
+        } = req.query;
 
-        const offset = (page - 1) * limit;
+        const offset = (page - 1) * limit; // Пагинация
 
         // Валидация параметров пагинации
         if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
@@ -190,6 +190,18 @@ exports.getOrderById = async (req, res) => {
         }
 
         const order = orderResult.rows[0];
+        let userEmail = null;
+
+        // Получаем email пользователя, если есть accountId
+        if (order.accountId) {
+            const emailQuery = `
+                SELECT email 
+                FROM "account" 
+                WHERE id = $1 AND email IS NOT NULL
+            `;
+            const emailResult = await client.query(emailQuery, [order.accountId]);
+            userEmail = emailResult.rows[0]?.email || null;
+        }
 
         // Адрес доставки
         const addressQuery = `
@@ -225,7 +237,8 @@ exports.getOrderById = async (req, res) => {
                 sequenceNumber: order.sequenceNumber,
                 isFinal: order.isFinalResultPositive !== null,
                 isPositive: order.isFinalResultPositive
-            } : null
+            } : null,
+            userEmail
         };
 
         // Очищаем дублирующиеся поля
@@ -488,7 +501,7 @@ exports.updateOrder = async (req, res) => {
             req.body.paymentMethod,
             req.body.isPaymentStatus,
             req.body.prepareChangeMoney || null,
-            req.body.commentFromManager || '',
+            req.body.commentFromManager || null,
             req.body.nameClient || '',
             req.body.numberPhoneClient || '',
             req.params.id
@@ -952,5 +965,290 @@ exports.createOrderClient = async (req, res) => {
         });
     } finally {
         client.release(); // Освобождаем клиента
+    }
+};
+
+// Получить отчёт по продажам блюд с пагинацией, группировкой и фильтрами
+exports.getDishSalesReport = async (req, res) => {
+    try {
+        // Извлекаем параметры запроса
+        const {
+            page = 1,
+            limit = 100,
+            sort,
+            date,
+            categories
+        } = req.query;
+
+        const offset = (page - 1) * limit;
+
+        // Валидация параметров пагинации
+        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
+            return res.status(400).json({ error: 'Некорректные параметры пагинации' });
+        }
+
+        // Базовый запрос для агрегации данных
+        let baseQuery = `
+            SELECT 
+                d.id AS "dishId",
+                d.name AS "dishName",
+                c.id AS "categoryId",
+                c.name AS "categoryName",
+                SUM(co."quantityOrder") AS "totalQuantity",
+                ROUND(AVG(co."pricePerUnit")::numeric, 2) AS "averagePrice",
+                SUM(co."quantityOrder" * co."pricePerUnit") AS "totalAmount"
+            FROM "compositionOrder" co
+            INNER JOIN "order" o ON co."orderId" = o.id
+            INNER JOIN dish d ON co."dishId" = d.id
+            INNER JOIN category c ON d."categoryId" = c.id
+            WHERE 1 = 1
+        `;
+
+        const queryParams = [];
+        let paramCounter = 1;
+
+        // Фильтрация по дате оформления заказа
+        if (date?.start) {
+            baseQuery += ` AND o."orderPlacementTime" >= $${paramCounter++}`;
+            queryParams.push(new Date(date.start));
+        }
+        if (date?.end) {
+            baseQuery += ` AND o."orderPlacementTime" <= $${paramCounter++}`;
+            queryParams.push(new Date(date.end));
+        }
+
+        // Фильтрация по категориям
+        const categoryIds = categories?.map(category => category.id); // Получаем массив id категорий
+
+        if (categoryIds?.length > 0) {
+            baseQuery += ` AND c.id = ANY($${paramCounter++}::integer[])`;
+            queryParams.push(categoryIds);
+        }
+
+        // Группировка
+        baseQuery += ` GROUP BY d.id, c.id `;
+
+        // Сортировка
+        if (sort?.type && sort?.order) {
+            const sortColumn = {
+                'quantity': '"totalQuantity"',
+                'amount': '"totalAmount"'
+            }[sort.type];
+
+            if (sortColumn) {
+                baseQuery += ` ORDER BY ${sortColumn} ${sort.order} `;
+            }
+        } else {
+            baseQuery += ` ORDER BY "totalQuantity" DESC `;
+        }
+
+        // Запрос для данных с пагинацией
+        const dataQuery = `
+            ${baseQuery}
+            LIMIT $${paramCounter++} OFFSET $${paramCounter++}
+        `;
+
+        // Запрос для общих сумм
+        const totalsQuery = `
+            SELECT 
+                SUM(sub."totalQuantity") AS "totalSold",
+                SUM(sub."totalAmount") AS "totalRevenue"
+            FROM (${baseQuery}) sub
+        `;
+
+        // Параметры для пагинации
+        const paginationParams = [parseInt(limit), parseInt(offset)];
+        const fullParams = [...queryParams, ...paginationParams];
+
+        // Выполнение запросов
+        const [dataResult, totalsResult] = await Promise.all([
+            pool.query(dataQuery, fullParams),
+            pool.query(totalsQuery, queryParams)
+        ]);
+
+        // Формирование ответа
+        res.json({
+            total: dataResult.rowCount,
+            currentPage: parseInt(page),
+            limit: parseInt(limit),
+            totalSold: parseInt(totalsResult.rows[0]?.totalSold || 0),
+            totalRevenue: parseFloat(totalsResult.rows[0]?.totalRevenue || 0),
+            data: dataResult.rows.map(row => ({
+                dishId: row.dishId,
+                dishName: row.dishName,
+                categoryId: row.categoryId,
+                categoryName: row.categoryName,
+                totalQuantity: parseInt(row.totalQuantity),
+                averagePrice: parseFloat(row.averagePrice),
+                totalAmount: parseFloat(row.totalAmount)
+            }))
+        });
+
+    } catch (error) {
+        console.error('Ошибка при получении отчёта:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
+    }
+};
+
+// Получить отчёт по заказам с пагинацией и статистикой
+exports.getOrdersReport = async (req, res) => {
+    try {
+        // Извлекаем параметры фильтрации и пагинации
+        const {
+            page = 1,
+            limit = 100,
+            sort,
+            orderStatus,
+            isPaymentStatus,
+            paymentMethod,
+            date
+        } = req.query;
+
+        const offset = (page - 1) * limit; // Пагинация
+
+        // Валидация пагинации
+        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
+            return res.status(400).json({ error: 'Некорректные параметры пагинации' });
+        }
+
+        // Базовая часть запроса и условия фильтрации
+        let baseQuery = `
+            FROM "order" o
+            LEFT JOIN "orderStatus" os ON o."orderStatusId" = os.id
+            LEFT JOIN "deliveryAddress" da ON o."deliveryAddressId" = da.id
+            WHERE 1 = 1
+        `;
+
+        const queryParams = [];
+        let paramCounter = 1; // Счетчик параметров
+
+        // Фильтрация по дате оформления
+        if (date?.start) {
+            baseQuery += ` AND o."orderPlacementTime" >= $${paramCounter++}`;
+            queryParams.push(new Date(date.start));
+        }
+        if (date?.end) {
+            baseQuery += ` AND o."orderPlacementTime" <= $${paramCounter++}`;
+            queryParams.push(new Date(date.end));
+        }
+
+        // Фильтрация по статусам
+        const orderStatusIds = orderStatus?.map(status => status.id);  // Получаем массив id статусов
+        if (orderStatusIds?.length > 0) {
+            const nullIncluded = orderStatusIds.includes('null'); // Если есть статус с id === new, то отделяем его
+            const idsWithoutNull = orderStatusIds.filter(id => id !== 'null');
+            let conditions = []; // Собираем запрос из условий
+
+            if (nullIncluded) conditions.push(`o."orderStatusId" IS NULL`); // Ищем заказы со статусом NULL
+            if (idsWithoutNull.length > 0) { // Ищем по другим статусам
+                conditions.push(`o."orderStatusId" = ANY($${paramCounter++}::integer[])`);
+                queryParams.push(idsWithoutNull);
+            }
+
+            if (conditions.length > 0) { // Добавляем условие, если есть
+                baseQuery += ' AND (' + conditions.join(' OR ') + ')';
+            }
+        }
+
+        // Фильтр по статусу оплаты
+        if (isPaymentStatus) {
+            baseQuery += ` AND o."isPaymentStatus" = $${paramCounter++}`;
+            queryParams.push(isPaymentStatus === 'Оплачен');
+        }
+
+        // Фильтр метода оплаты
+        const orderPaymentMethods = paymentMethod?.map(status => status.name); // Получаем массив name
+        if (orderPaymentMethods?.length > 0) {
+            baseQuery += ` AND o."paymentMethod" = ANY($${paramCounter++}::text[]) `;
+            queryParams.push(orderPaymentMethods);
+        }
+
+        // Запрос для данных
+        const dataQuery = `
+            SELECT 
+                o.*,
+                os.name as "statusName",
+                os."sequenceNumber",
+                os."isFinalResultPositive",
+                os."isAvailableClient",
+                da.city,
+                da.street,
+                da.house,
+                da.apartment
+            ${baseQuery}
+            ${sort?.type && sort?.order ?
+                `ORDER BY ${sort.type === 'deliveryDate' ?
+                    '"endDesiredDeliveryTime"' :
+                    '"orderPlacementTime"'} ${sort.order}` : ''}
+            LIMIT $${paramCounter++} OFFSET $${paramCounter++}
+        `;
+
+        // Запрос для статистики
+        const statsQuery = `
+            SELECT
+                COUNT(*) as "totalOrders",
+                SUM("goodsCost" + "shippingCost") as "totalRevenue",
+                SUM("goodsCost") as "totalGoodsCost",
+                SUM("shippingCost") as "totalShippingCost",
+                AVG("goodsCost" + "shippingCost") as "averageOrderValue"
+            ${baseQuery}
+        `;
+
+        // Параметры пагинации
+        const paginationParams = [parseInt(limit), parseInt(offset)];
+        const fullParams = [...queryParams, ...paginationParams];
+
+        // Выполнение запросов
+        const [dataResult, statsResult] = await Promise.all([
+            pool.query(dataQuery, fullParams),
+            pool.query(statsQuery, queryParams)
+        ]);
+
+        const stats = statsResult.rows[0];
+        const totalOrders = parseInt(stats.totalOrders) || 0;
+
+        // Форматирование статистики
+        const response = {
+            data: dataResult.rows.map(order => ({
+                ...order,
+                deliveryAddress: {
+                    city: order.city,
+                    street: order.street,
+                    house: order.house,
+                    apartment: order.apartment || null
+                },
+                status: order.statusName ? {
+                    name: order.statusName,
+                    sequenceNumber: order.sequenceNumber,
+                    isFinalResultPositive: order.isFinalResultPositive,
+                    isAvailableClient: order.isAvailableClient
+                } : null
+            })),
+            pagination: {
+                total: totalOrders,
+                currentPage: parseInt(page),
+                limit: parseInt(limit)
+            },
+            statistics: {
+                totalRevenue: parseFloat(stats.totalRevenue || 0).toFixed(2),
+                totalGoodsCost: parseFloat(stats.totalGoodsCost || 0).toFixed(2),
+                totalShippingCost: parseFloat(stats.totalShippingCost || 0).toFixed(2),
+                averageOrderValue: totalOrders > 0
+                    ? parseFloat(stats.averageOrderValue).toFixed(2)
+                    : 0
+            }
+        };
+
+        res.json(response);
+
+    } catch (error) {
+        console.error('Ошибка при формировании отчёта:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
     }
 };
