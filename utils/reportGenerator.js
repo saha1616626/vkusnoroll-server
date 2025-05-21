@@ -249,7 +249,7 @@ exports.generateExcel = (reportData) => {
             cell.style = dataCellStyle;
             // Форматирование чисел
             if (['Всего заказов', 'Средний чек'].includes(col)) {
-                cell.numFmt = '#,##0.00';
+                cell.numFmt = '#,##0.00'; // Формат с запятой
             }
         });
     });

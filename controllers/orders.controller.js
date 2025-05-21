@@ -1474,9 +1474,9 @@ exports.generateOrdersReport = async (req, res) => {
             columns: columns, // Русские заголовки
             data: dataResult.rows.map(row => ({
                 ...row,
-                Товары: row.Товары,
-                Доставка: row.Доставка,
-                Сумма: row.Сумма
+                Товары: parseFloat(row.Товары?.toFixed(2)),
+                Доставка: parseFloat(row.Доставка?.toFixed(2)),
+                Сумма: parseFloat(row.Сумма?.toFixed(2))
             })),
             stats: {
                 "Всего заказов": parseInt(stats.totalOrders || '0'),
@@ -1654,12 +1654,12 @@ exports.generateDishSalesReport = async (req, res) => {
             data: dataResult.rows.map(row => ({
                 ...row,
                 Количество: parseInt(row.Количество),
-                Цена: row.Цена,
-                Сумма: row.Сумма
+                Цена: parseFloat(row.Цена?.toFixed(2)),
+                Сумма: parseFloat(row.Сумма?.toFixed(2))
             })),
             stats: {
                 "Всего продано": parseInt(statsResult.rows[0]?.totalSold) || '0',
-                "Общая выручка": statsResult.rows[0]?.totalRevenue?.toFixed(2) || '0'
+                "Общая выручка": parseFloat(statsResult.rows[0]?.totalRevenue?.toFixed(2)) || '0'
             }
         };
 
