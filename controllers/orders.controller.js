@@ -1315,8 +1315,16 @@ exports.generateOrdersReport = async (req, res) => {
             columns // Массив выбранных колонок
         } = req.query;
 
+        // Проверка наличия столбцов
+        if (!Array.isArray(columns)) {
+            return res.status(400).json({ error: 'Некорректный формат столбцов' });
+        }
+        if (columns.length === 0) {
+            return res.status(400).json({ error: 'Выберите минимум один столбец для отчёта' });
+        }
+
         // Получаем тип отчета
-        const reportType = req.params.type === 'orders' ? 'по заказам' : '-';
+        const reportType = 'по заказам';
 
         // Базовая часть запроса и условия фильтрации
         let baseQuery = `
@@ -1374,7 +1382,7 @@ exports.generateOrdersReport = async (req, res) => {
                 const statusNames = statusResult.rows.map(s => s.name);
 
                 if (nullIncluded) statusNames.unshift('Новый');
-                appliedFilters['Статус заказа'] = statusNames.join(', ');
+                appliedFilters[`${orderStatusIds?.length === 1 ? 'Статус заказа' : 'Статусы заказа'}`] = statusNames.join(', ');
             }
 
         }
@@ -1407,18 +1415,18 @@ exports.generateOrdersReport = async (req, res) => {
                     'card': 'Картой при получении'
                 }[m] || m;
             });
-            appliedFilters['Способ оплаты'] = paymentNames.join(', ');
+            appliedFilters[`${orderPaymentMethods?.length === 1 ? 'Способ оплаты' : 'Способы оплаты'}`] = paymentNames.join(', ');
         }
 
         // Сортировка
         if (sort?.type && sort?.order) {
             const sortLabels = {
-                'orderDate': 'Дата заказа',
-                'deliveryDate': 'Дата доставки'
+                'orderDate': 'По дате заказа',
+                'deliveryDate': 'По дате доставки'
             };
             const orderLabels = {
-                'asc': sort.type === 'orderDate' ? 'Старые' : 'Ближе',
-                'desc': sort.type === 'orderDate' ? 'Новые' : 'Дальше'
+                'asc': sort.type === 'orderDate' ? 'сначал старые' : 'сначал ближе',
+                'desc': sort.type === 'orderDate' ? 'сначала новые' : 'сначала дальше'
             };
             appliedFilters['Сортировка'] = `${sortLabels[sort.type]} (${orderLabels[sort.order]})`;
         }
@@ -1464,13 +1472,18 @@ exports.generateOrdersReport = async (req, res) => {
             reportType: reportType,
             filters: appliedFilters, // Применённые фильтры
             columns: columns, // Русские заголовки
-            data: dataResult.rows,
+            data: dataResult.rows.map(row => ({
+                ...row,
+                Товары: row.Товары,
+                Доставка: row.Доставка,
+                Сумма: row.Сумма
+            })),
             stats: {
-                "Всего заказов": stats.totalOrders,
-                "Общая выручка": stats.totalRevenue || '—',
-                "Стоимость товаров": stats.totalGoodsCost || '—',
-                "Стоимость доставки": stats.totalShippingCost || '—',
-                "Средний чек": stats.averageOrderValue?.toFixed(2) || '—'
+                "Всего заказов": parseInt(stats.totalOrders || '0'),
+                "Общая выручка": parseFloat(stats.totalRevenue?.toFixed(2) || '0'),
+                "Стоимость товаров": parseFloat(stats.totalGoodsCost?.toFixed(2)|| '0'),
+                "Стоимость доставки": parseFloat(stats.totalShippingCost?.toFixed(2) || '0'),
+                "Средний чек": parseFloat(stats.averageOrderValue?.toFixed(2) || '0')
             }
         };
 
@@ -1504,5 +1517,167 @@ const COLUMN_MAPPING_DISH_SALES_REPORT = {
 
 // Генерация отчёта по товарам (без пагинации)
 exports.generateDishSalesReport = async (req, res) => {
+    try {
+        const {
+            sort,
+            date,
+            categories,
+            isPaymentStatus,
+            isCompletionStatus,
+            columns // Массив выбранных колонок
+        } = req.query;
 
+        // Проверка наличия столбцов
+        if (!Array.isArray(columns)) {
+            return res.status(400).json({ error: 'Некорректный формат столбцов' });
+        }
+        if (columns.length === 0) {
+            return res.status(400).json({ error: 'Выберите минимум один столбец для отчёта' });
+        }
+
+        // Получаем тип отчета
+        const reportType = 'по товарам';
+
+        // Базовая часть запроса и условия фильтрации
+        let baseQuery = `
+        FROM "compositionOrder" co
+        INNER JOIN "order" o ON co."orderId" = o.id
+        INNER JOIN dish d ON co."dishId" = d.id
+        INNER JOIN category c ON d."categoryId" = c.id
+        WHERE 1 = 1
+    `;
+
+        const queryParams = [];
+        let paramCounter = 1; // Счетчик параметров
+
+        // Сбор данных о применённых фильтрах
+        const appliedFilters = {};
+
+        // Фильтрация по дате оформления заказа
+        if (date?.start) {
+            baseQuery += ` AND o."orderPlacementTime" >= $${paramCounter++}`;
+            queryParams.push(new Date(date.start));
+        }
+        if (date?.end) {
+            baseQuery += ` AND o."orderPlacementTime" <= $${paramCounter++}`;
+            queryParams.push(new Date(date.end));
+        }
+
+        // Период
+        if (date?.start || date?.end) {
+            const start = date.start ? new Date(date.start).toLocaleDateString('ru-RU') : '—';
+            const end = date.end ? new Date(date.end).toLocaleDateString('ru-RU') : '—';
+            appliedFilters['Период'] = `с ${start} по ${end}`;
+        }
+
+        // Фильтрация по категориям
+        const categoryIds = categories?.map(category => category.id); // Получаем массив id категорий
+
+        if (categoryIds?.length > 0) {
+            baseQuery += ` AND c.id = ANY($${paramCounter++}::integer[])`;
+            queryParams.push(categoryIds);
+
+            // Получаем названия категорий из БД
+            const categoryQuery = `SELECT name FROM category WHERE id = ANY($1)`;
+            const categoryResult = await pool.query(categoryQuery, [categoryIds]);
+            appliedFilters[`${categoryIds?.length === 1 ? 'Категория' : 'Категории'}`] = categoryResult.rows.map(r => r.name).join(', ');
+        }
+
+        // Фильтрация по статусу оплаты
+        if (isPaymentStatus) {
+            baseQuery += ` AND o."isPaymentStatus" = $${paramCounter++}`;
+            queryParams.push(isPaymentStatus === 'Оплачен');
+            appliedFilters['Статус оплаты'] = isPaymentStatus ? 'Оплачен' : 'Не оплачен';
+        }
+
+        // Фильтрация по статусу завершения
+        if (isCompletionStatus) {
+            if (isCompletionStatus === 'Завершен') {
+                baseQuery += ` AND o."orderCompletionTime" IS NOT NULL`;
+            } else {
+                baseQuery += ` AND o."orderCompletionTime" IS NULL`;
+            }
+            appliedFilters['Статус выполнения'] = isCompletionStatus;
+        }
+
+        // Группировка
+        baseQuery += ` GROUP BY d.id, c.id `;
+
+        // Сортировка
+        if (sort?.type && sort?.order) {
+            const sortColumn = {
+                'quantity': 'SUM(co."quantityOrder")',
+                'amount': 'SUM(co."quantityOrder" * co."pricePerUnit")'
+            }[sort.type];
+
+            if (sortColumn) {
+                baseQuery += ` ORDER BY ${sortColumn} ${sort.order}`;
+                appliedFilters['Сортировка'] = `${sort.type === 'quantity' ? 'По количеству' : 'По сумме'} (${sort.order === 'asc' ? 'сначала меньше' : 'сначала больше'})`;
+            }
+        }
+
+        // Преобразование колонок
+        const sqlColumns = columns.map(col => {
+            const expression = COLUMN_MAPPING_DISH_SALES_REPORT[col];
+            if (!expression) throw new Error(`Неизвестная колонка: ${col}`);
+            return expression;
+        });
+
+        // Запрос данных
+        const dataQuery = `
+            SELECT 
+                ${sqlColumns.join(', ')}
+            ${baseQuery}
+        `;
+
+        // Запрос статистики
+        const statsQuery = `
+            SELECT
+                SUM(sub."Количество") as "totalSold",
+                SUM(sub."Сумма") as "totalRevenue"
+            FROM (SELECT 
+                    SUM(co."quantityOrder") as "Количество",
+                    SUM(co."quantityOrder" * co."pricePerUnit") as "Сумма"
+                ${baseQuery}) sub
+            `;
+
+        const [dataResult, statsResult] = await Promise.all([
+            pool.query(dataQuery, queryParams),
+            pool.query(statsQuery, queryParams)
+        ]);
+
+        // Формирование данных отчета
+        const reportData = {
+            reportType,
+            filters: appliedFilters,
+            columns: columns,
+            data: dataResult.rows.map(row => ({
+                ...row,
+                Количество: parseInt(row.Количество),
+                Цена: row.Цена,
+                Сумма: row.Сумма
+            })),
+            stats: {
+                "Всего продано": parseInt(statsResult.rows[0]?.totalSold) || '0',
+                "Общая выручка": statsResult.rows[0]?.totalRevenue?.toFixed(2) || '0'
+            }
+        };
+
+        // Генерация файла
+        if (req.query.format === 'pdf') {
+            const pdfBuffer = await generatePDF(reportData);
+            res.set({
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment;`
+            });
+            res.send(Buffer.from(pdfBuffer));
+        } else {
+            const excelBuffer = await generateExcel(reportData);
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.send(excelBuffer);
+        }
+    } catch (error) {
+        console.error('Ошибка генерации отчёта:', error);
+        res.status(500).json({ error: 'Ошибка сервера', details: error.message });
+    }
 }

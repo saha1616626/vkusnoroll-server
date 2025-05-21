@@ -2,6 +2,7 @@
 
 const pdfMake = require('pdfmake/build/pdfmake.js');
 const pdfFonts = require('pdfmake/build/vfs_fonts.js');
+const ExcelJS = require('exceljs');
 
 // Инициализация шрифтов
 pdfMake.vfs = pdfFonts.vfs;
@@ -41,6 +42,15 @@ exports.generatePDF = async (reportData) => {
             columnGroups.push(group);
         }
 
+        // Текущая дата в формате "дд.мм.гггг чч:мм"
+        const now = new Date();
+        const formattedDate =
+            `${String(now.getDate()).padStart(2, '0')}.` +
+            `${String(now.getMonth() + 1).padStart(2, '0')}.` +
+            `${now.getFullYear()} ` +
+            `${String(now.getHours()).padStart(2, '0')}:` +
+            `${String(now.getMinutes()).padStart(2, '0')}`;
+
         // Определение структуры документа
         const docDefinition = {
             pageOrientation: 'landscape', // Альбомная ориентация
@@ -55,17 +65,24 @@ exports.generatePDF = async (reportData) => {
             content: [
                 { text: "Отчёт по продажам", style: "headerTitle" },
 
+                { text: `Тип отчёта: ${reportData.reportType}`, margin: [0, 20, 0, 0] },
+
+                // Блок с датой генерации
+                {
+                    text: `Сформировано: ${formattedDate}`,
+                    style: 'dateStyle',
+                    margin: [0, 2, 0, 20]
+                },
+
                 // Блок фильтров
-                { text: "Применённые фильтры:", style: "subheader", margin: [0, 20, 0, 0] },
+                { text: "Применённые фильтры:", style: "subheader", margin: [0, 0, 0, 0] },
                 ...Object.entries(reportData.filters).map(([key, value]) => ({
                     text: `${key}: ${value}`,
                     margin: [0, 2]
                 })),
 
                 // Пустая строка
-                { text: '', margin: [0, 10, 0, 0], },
-
-                { text: `Тип отчёта: ${reportData.reportType}`, margin: [0, 10] },
+                { text: '', margin: [0, 10], },
 
                 // Таблица
                 ...columnGroups.flatMap((group, groupIndex) => {
@@ -93,7 +110,6 @@ exports.generatePDF = async (reportData) => {
                         },
                         layout: {
                             fillHeader: (i, node) => i < node.table.headerRows,
-                            // paddingBottom: () => 10,
                             hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 1 : 0.5,
                             vLineWidth: () => 0.5,
                             fillColor: (rowIndex) => rowIndex === 0 ? '#d6d6d6' : null
@@ -160,20 +176,105 @@ exports.generateExcel = (reportData) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Отчёт');
 
-    // Добавляем заголовки фильтров
-    worksheet.addRow(['Применённые фильтры:']);
+    // Стили для ячеек
+    const headerStyle = { // Заголовок
+        font: { bold: true, color: { argb: 'FFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F81BD' } },
+        alignment: { vertical: 'middle', horizontal: 'center' },
+        border: { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } }
+    };
+
+    const dateStyle = { // Время
+        font: { size: 10, italic: true },
+        alignment: { horizontal: 'center' }
+    };
+
+    const dataCellStyle = { // Таблица
+        border: { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } },
+        alignment: { vertical: 'middle', horizontal: 'left' }
+    };
+
+    // Заголовок отчёта
+    worksheet.mergeCells('B2:C2');
+    worksheet.getCell('B2').value = `Отчёт ${reportData.reportType}`;
+    worksheet.getCell('B2').style = {
+        font: { bold: true, size: 14 },
+        alignment: { horizontal: 'center' }
+    };
+
+    // Дата генерации
+    const now = new Date();
+    const formattedDate =
+        `${String(now.getDate()).padStart(2, '0')}.` +
+        `${String(now.getMonth() + 1).padStart(2, '0')}.` +
+        `${now.getFullYear()} ` +
+        `${String(now.getHours()).padStart(2, '0')}:` +
+        `${String(now.getMinutes()).padStart(2, '0')}`;
+
+    worksheet.mergeCells('B3:C3');
+    worksheet.getCell('B3').value = `Сформировано: ${formattedDate}`;
+    worksheet.getCell('B3').style = dateStyle;
+
+    // Блок фильтров
+    let rowIndex = 5;
+    worksheet.getCell(`B${rowIndex}`).value = 'Применённые фильтры:';
+    worksheet.getCell(`B${rowIndex}`).style = { font: { bold: true } };
+
     Object.entries(reportData.filters).forEach(([key, value]) => {
-        worksheet.addRow([key, value]);
+        rowIndex++;
+        worksheet.getCell(`B${rowIndex}`).value = key;
+        worksheet.getCell(`C${rowIndex}`).value = value;
     });
 
-    // Добавляем таблицу
-    worksheet.addRow(reportData.columns);
-    reportData.data.forEach(row => {
-        worksheet.addRow(reportData.columns.map(col => row[col]));
+    // Пустая строка после фильтров
+    rowIndex += 2;
+
+    // Добавляем колонку № и выбранные колонки
+    const columns = ['№', ...reportData.columns.filter(col => col !== "№")];
+    const startCol = 2; // Начинаем с колонки B
+
+    // Заголовки таблицы
+    columns.forEach((col, index) => {
+        const cell = worksheet.getRow(rowIndex).getCell(startCol + index);
+        cell.value = col;
+        cell.style = headerStyle;
     });
 
-    // Добавляем итоги
-    worksheet.addRow(['Общая выручка', reportData.stats.totalRevenue]);
+    // Данные таблицы
+    reportData.data.forEach((row, idx) => {
+        const dataRow = worksheet.addRow([]); // Пустая строка
+        columns.forEach((col, colIndex) => {
+            const cell = dataRow.getCell(startCol + colIndex);
+            cell.value = colIndex === 0 ? idx + 1 : row[col] || '-';
+            cell.style = dataCellStyle;
+            // Форматирование чисел
+            if (['Всего заказов', 'Средний чек'].includes(col)) {
+                cell.numFmt = '#,##0.00';
+            }
+        });
+    });
+
+    // Итоговая статистика
+    const statsRow = worksheet.rowCount + 2;
+    worksheet.getCell(`B${statsRow}`).value = 'Итоги:';
+    worksheet.getCell(`B${statsRow}`).style = { font: { bold: true } };
+
+    Object.entries(reportData.stats).forEach(([key, value], idx) => {
+        worksheet.getCell(`B${statsRow + idx + 1}`).value = key;
+        worksheet.getCell(`C${statsRow + idx + 1}`).value =
+            typeof value === 'string' && value.includes('—') ? value : Number(value) || 0;
+        // worksheet.getCell(`C${statsRow + idx + 1}`).numFmt = '#,##0.00'; // Все данные в блоке становятся в формате «0,00»
+    });
+
+    // Авто-ширина для колонок
+    worksheet.columns.forEach(column => {
+        let maxLength = 0;
+        column.eachCell({ includeEmpty: true }, cell => {
+            const length = cell.value?.toString().length || 0;
+            if (length > maxLength) maxLength = length;
+        });
+        column.width = Math.min(maxLength + 5, 30);
+    });
 
     return workbook.xlsx.writeBuffer();
 };
