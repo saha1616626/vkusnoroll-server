@@ -352,6 +352,115 @@ exports.getClients = async (req, res) => {
     }
 };
 
+// Получение списка пользователей с пагинацией и фильтрами
+exports.getClientsPaginationFilters = async (req, res) => {
+    try {
+        // Извлекаем параметры фильтрации и пагинации
+        const {
+            page = 1,
+            limit = 100,
+            numberPhone,
+            name,
+            isAccountTermination,
+            search
+        } = req.query;
+
+        const offset = (page - 1) * limit; // Пагинация
+
+        // Валидация пагинации
+        if (isNaN(page) || isNaN(limit) || page < 1 || limit < 1) {
+            return res.status(400).json({ error: 'Некорректные параметры пагинации' });
+        }
+
+        // Базовая часть запроса и условия фильтрации
+        let baseQuery = `
+            FROM account a
+            JOIN role r ON a."roleId" = r.id
+            WHERE r.name != 'Администратор' and r.name != 'Менеджер'
+        `;
+
+        const queryParams = [];
+        let paramCounter = 1; // Счетчик параметров
+
+        // Фильтрация по номеру телефона
+        if (numberPhone) {
+            baseQuery += ` AND a."numberPhone" ILIKE '%' || $${paramCounter++} || '%'`;
+            queryParams.push(numberPhone.trim());
+        }
+
+        // Фильтрация по имени
+        if (name) {
+            baseQuery += ` AND a.name ILIKE '%' || $${paramCounter++} || '%'`;
+            queryParams.push(name.trim());
+        }
+
+        // Фильтрация по доступу к учетной записи
+        if (isAccountTermination) {
+            if (isAccountTermination === 'Заблокирован') {
+                baseQuery += ` AND a."isAccountTermination" = true`;
+            } else {
+                baseQuery += ` AND a."isAccountTermination" = false`;
+            }
+        }
+
+        // Фильтация по запросу в поле поиска
+        if (search) {
+            baseQuery += ` AND a.email ILIKE '%' || $${paramCounter++} || '%'`;
+            queryParams.push(search);
+        }
+
+        // Запрос ДЛЯ ПОДСЧЁТА количества (без LIMIT/OFFSET)
+        const countQuery = `
+            SELECT COUNT(*) as total
+            ${baseQuery}
+        `;
+
+        // Запрос для данных
+        const dataQuery = `
+            SELECT
+                a.id,
+                a."roleId",
+                r.name as role,
+                a.name,
+                a.surname,
+                a.patronymic,
+                a.email,
+                a."numberPhone",
+                a.login,
+                a."password",
+                a."registrationDate",
+                a."confirmationСode",
+                a."dateTimeСodeCreation",
+                a."isAccountTermination",
+                a."isEmailConfirmed",
+                a."isOrderManagementAvailable", 
+                a."isMessageCenterAvailable"
+            ${baseQuery}
+            LIMIT $${paramCounter++} OFFSET $${paramCounter++}
+        `;
+
+        // Параметры пагинации
+        const paginationParams = [parseInt(limit), parseInt(offset)];
+        const fullParams = [...queryParams, ...paginationParams];
+
+        // Выполнение запроса
+        const [dataResult, countResult] = await Promise.all([
+            pool.query(dataQuery, fullParams),
+            pool.query(countQuery, queryParams),
+        ]);
+
+        const total = parseInt(countResult.rows[0].total); // Кол-во строк без LIMIT и OFFSET
+
+        res.json({total, data: dataResult?.rows});  // Успешно
+    } catch (error) {
+        console.error('Ошибка при получении списка пользователей:', error);
+        res.status(500).json({
+            error: 'Ошибка сервера',
+            details: error.message
+        });
+    }
+}
+
 // Обновление клиентского аккаунта (админ часть)
 exports.updateClient = async (req, res) => {
     try {

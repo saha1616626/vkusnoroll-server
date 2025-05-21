@@ -24,6 +24,7 @@ router.put('/employees/:id', accountsController.updateEmploye);
 
 
 // Маршруты для пользователей (админ часть)
+router.get('/clients/filters', accountsController.getClientsPaginationFilters); // Получение списка пользователей с пагинацией и фильтрами
 router.get('/clients', accountsController.getClients);
 router.put('/clients/:id', accountsController.updateClient);
 router.delete('/clients/:id', accountsController.deleteClient);
