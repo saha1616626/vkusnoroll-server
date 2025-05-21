@@ -1250,11 +1250,11 @@ exports.getOrdersReport = async (req, res) => {
                 limit: parseInt(limit)
             },
             statistics: {
-                totalRevenue: parseFloat(stats.totalRevenue || 0).toFixed(2),
-                totalGoodsCost: parseFloat(stats.totalGoodsCost || 0).toFixed(2),
-                totalShippingCost: parseFloat(stats.totalShippingCost || 0).toFixed(2),
+                totalRevenue: parseFloat(stats.totalRevenue || 0),
+                totalGoodsCost: parseFloat(stats.totalGoodsCost || 0),
+                totalShippingCost: parseFloat(stats.totalShippingCost || 0),
                 averageOrderValue: totalOrders > 0
-                    ? parseFloat(stats.averageOrderValue).toFixed(2)
+                    ? parseFloat(stats.averageOrderValue)
                     : 0
             }
         };
