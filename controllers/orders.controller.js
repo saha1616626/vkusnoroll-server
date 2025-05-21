@@ -2,8 +2,8 @@
 
 const pool = require('../config/db'); // Подключение к БД
 const { broadcastNewOrder } = require('./../websocket'); // Метод Websocket
-const {
-} = require('../services/orders.query.service'); // Запросы
+const { generatePDF, generateExcel } = require('./../utils/reportGenerator'); // Утилита для генерации отчета
+const { } = require('../services/orders.query.service'); // Запросы
 
 // Получить список всех заказов с пагинацией
 exports.getAllOrders = async (req, res) => {
@@ -977,7 +977,9 @@ exports.getDishSalesReport = async (req, res) => {
             limit = 100,
             sort,
             date,
-            categories
+            categories,
+            isPaymentStatus,
+            isCompletionStatus
         } = req.query;
 
         const offset = (page - 1) * limit;
@@ -1023,6 +1025,21 @@ exports.getDishSalesReport = async (req, res) => {
         if (categoryIds?.length > 0) {
             baseQuery += ` AND c.id = ANY($${paramCounter++}::integer[])`;
             queryParams.push(categoryIds);
+        }
+
+        // Фильтрация по статусу оплаты
+        if (isPaymentStatus) {
+            baseQuery += ` AND o."isPaymentStatus" = $${paramCounter++}`;
+            queryParams.push(isPaymentStatus === 'Оплачен');
+        }
+
+        // Фильтрация по статусу завершения заказа
+        if (isCompletionStatus) {
+            if (isCompletionStatus === 'Завершен') {
+                baseQuery += ` AND o."orderCompletionTime" IS NOT NULL`;
+            } else {
+                baseQuery += ` AND o."orderCompletionTime" IS NULL`;
+            }
         }
 
         // Группировка
@@ -1252,3 +1269,240 @@ exports.getOrdersReport = async (req, res) => {
         });
     }
 };
+
+// Маппинг колонок из таблицы для отчётности по заказам
+const COLUMN_MAPPING_ORDERS_REPORT = {
+    'Номер': 'o."orderNumber" as "Номер"',
+    'Дата и время оформления': 'to_char(o."orderPlacementTime" AT TIME ZONE \'Europe/Moscow\', \'DD.MM.YYYY HH24:MI\') as "Дата и время оформления"',
+    'Дата и время доставки': `
+        CASE 
+            WHEN o."startDesiredDeliveryTime" IS NOT NULL AND o."endDesiredDeliveryTime" IS NOT NULL 
+            THEN 
+                CASE 
+                    WHEN to_char(o."startDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'DD.MM.YYYY\') = to_char(o."endDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'DD.MM.YYYY\') 
+                    THEN to_char(o."startDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'DD.MM.YYYY\') || \' \' || 
+                         to_char(o."startDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'HH24:MI\') || \' - \' || 
+                         to_char(o."endDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'HH24:MI\')
+                    ELSE to_char(o."startDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'DD.MM.YYYY HH24:MI\') || \' - \' || 
+                         to_char(o."endDesiredDeliveryTime" AT TIME ZONE \'Europe/Moscow\', \'DD.MM.YYYY HH24:MI\')
+                END
+            ELSE '—'
+        END as "Дата и время доставки"
+    `,
+    'Товары': 'o."goodsCost" as "Товары"',
+    'Доставка': 'o."shippingCost" as "Доставка"',
+    'Сумма': '(o."goodsCost" + o."shippingCost") as "Сумма"',
+    'Статус заказа': 'COALESCE(os.name, \'Новый\') as "Статус заказа"',
+    'Статус оплаты': `CASE WHEN o."isPaymentStatus" THEN 'Оплачен' ELSE 'Не оплачен' END as "Статус оплаты"`,
+    'Способ оплаты': 'o."paymentMethod" as "Способ оплаты"',
+    'Адрес доставки': `CONCAT(da.city, ', ', da.street, ', д. ', da.house, 
+    CASE WHEN da.apartment IS NOT NULL THEN ', кв. ' || da.apartment ELSE '' END) as "Адрес доставки"`,
+    'Комментарий клиента': 'o."commentFromClient" as "Комментарий клиента"',
+    'Комментарий менеджера': 'o."commentFromManager" as "Комментарий менеджера"',
+    'Имя клиента': 'o."nameClient" as "Имя клиента"',
+    'Телефон клиента': 'o."numberPhoneClient" as "Телефон клиента"'
+};
+
+// Генерация отчёта по заказам (без пагинации)
+exports.generateOrdersReport = async (req, res) => {
+    try {
+        const {
+            sort,
+            orderStatus,
+            isPaymentStatus,
+            paymentMethod,
+            date,
+            columns // Массив выбранных колонок
+        } = req.query;
+
+        // Получаем тип отчета
+        const reportType = req.params.type === 'orders' ? 'по заказам' : '-';
+
+        // Базовая часть запроса и условия фильтрации
+        let baseQuery = `
+            FROM "order" o
+            LEFT JOIN "orderStatus" os ON o."orderStatusId" = os.id
+            LEFT JOIN "deliveryAddress" da ON o."deliveryAddressId" = da.id
+            WHERE 1 = 1
+        `;
+
+        const queryParams = [];
+        let paramCounter = 1; // Счетчик параметров
+
+        // Сбор данных о применённых фильтрах
+        const appliedFilters = {};
+
+        // Фильтрация по дате оформления
+        if (date?.start) {
+            baseQuery += ` AND o."orderPlacementTime" >= $${paramCounter++}`;
+            queryParams.push(new Date(date.start));
+        }
+        if (date?.end) {
+            baseQuery += ` AND o."orderPlacementTime" <= $${paramCounter++}`;
+            queryParams.push(new Date(date.end));
+        }
+
+        // Период
+        if (date?.start || date?.end) {
+            const start = date.start ? new Date(date.start).toLocaleDateString('ru-RU') : '—';
+            const end = date.end ? new Date(date.end).toLocaleDateString('ru-RU') : '—';
+            appliedFilters['Период оформления'] = `с ${start} по ${end}`;
+        }
+
+        // Фильтрация по статусам
+        const orderStatusIds = orderStatus?.map(status => status.id);  // Получаем массив id статусов
+        if (orderStatusIds?.length > 0) {
+            const nullIncluded = orderStatusIds.includes('null'); // Если есть статус с id === new, то отделяем его
+            const idsWithoutNull = orderStatusIds.filter(id => id !== 'null');
+            let conditions = []; // Собираем запрос из условий
+
+            if (nullIncluded) conditions.push(`o."orderStatusId" IS NULL`); // Ищем заказы со статусом NULL
+            if (idsWithoutNull.length > 0) { // Ищем по другим статусам
+                conditions.push(`o."orderStatusId" = ANY($${paramCounter++}::integer[])`);
+                queryParams.push(idsWithoutNull);
+            }
+
+            if (conditions.length > 0) { // Добавляем условие, если есть
+                baseQuery += ' AND (' + conditions.join(' OR ') + ')';
+            }
+
+            // Примененные фильтры для отчета
+            if (orderStatusIds?.length > 0) {
+                // Получаем названия статусов из БД
+                const statusQuery = `SELECT id, name FROM "orderStatus" WHERE id = ANY($1)`;
+                const statusResult = await pool.query(statusQuery, [idsWithoutNull]);
+                const statusNames = statusResult.rows.map(s => s.name);
+
+                if (nullIncluded) statusNames.unshift('Новый');
+                appliedFilters['Статус заказа'] = statusNames.join(', ');
+            }
+
+        }
+
+        // Фильтр по статусу оплаты
+        if (isPaymentStatus) {
+            baseQuery += ` AND o."isPaymentStatus" = $${paramCounter++}`;
+            queryParams.push(isPaymentStatus === 'Оплачен');
+        }
+
+        // Статус оплаты (Примененные фильтры для отчета)
+        if (isPaymentStatus) {
+            const statusName = isPaymentStatus ? 'Оплачен' : 'Не оплачен';
+            appliedFilters['Статус оплаты'] = statusName;
+        }
+
+        // Фильтр метода оплаты
+        const orderPaymentMethods = paymentMethod?.map(status => status.name); // Получаем массив name
+        if (orderPaymentMethods?.length > 0) {
+            baseQuery += ` AND o."paymentMethod" = ANY($${paramCounter++}::text[]) `;
+            queryParams.push(orderPaymentMethods);
+        }
+
+        // Способ оплаты
+        if (orderPaymentMethods?.length > 0) {
+            const paymentNames = orderPaymentMethods.map(m => {
+                return {
+                    'online': 'Онлайн',
+                    'cash': 'Наличные',
+                    'card': 'Картой при получении'
+                }[m] || m;
+            });
+            appliedFilters['Способ оплаты'] = paymentNames.join(', ');
+        }
+
+        // Сортировка
+        if (sort?.type && sort?.order) {
+            const sortLabels = {
+                'orderDate': 'Дата заказа',
+                'deliveryDate': 'Дата доставки'
+            };
+            const orderLabels = {
+                'asc': sort.type === 'orderDate' ? 'Старые' : 'Ближе',
+                'desc': sort.type === 'orderDate' ? 'Новые' : 'Дальше'
+            };
+            appliedFilters['Сортировка'] = `${sortLabels[sort.type]} (${orderLabels[sort.order]})`;
+        }
+
+        // Преобразование русских колонок в SQL-выражения
+        const sqlColumns = columns.map(col => {
+            const expression = COLUMN_MAPPING_ORDERS_REPORT[col];
+            if (!expression) throw new Error(`Неизвестная колонка: ${col}`);
+            return expression;
+        });
+
+        // Запрос для данных
+        const dataQuery = `
+            SELECT 
+                  ${sqlColumns.join(', ')}
+            ${baseQuery}
+            ${sort?.type && sort?.order ?
+                `ORDER BY ${sort.type === 'deliveryDate' ?
+                    '"endDesiredDeliveryTime"' :
+                    '"orderPlacementTime"'} ${sort.order}` : ''}
+        `;
+
+        // Запрос для статистики
+        const statsQuery = `
+            SELECT
+                COUNT(*) as "totalOrders",
+                SUM("goodsCost" + "shippingCost") as "totalRevenue",
+                SUM("goodsCost") as "totalGoodsCost",
+                SUM("shippingCost") as "totalShippingCost",
+                AVG("goodsCost" + "shippingCost") as "averageOrderValue"
+            ${baseQuery}
+        `;
+
+        const [dataResult, statsResult] = await Promise.all([
+            pool.query(dataQuery, queryParams),
+            pool.query(statsQuery, queryParams)
+        ]);
+
+        const stats = statsResult.rows[0];
+
+        // Генерация файла
+        const reportData = {
+            reportType: reportType,
+            filters: appliedFilters, // Применённые фильтры
+            columns: columns, // Русские заголовки
+            data: dataResult.rows,
+            stats: {
+                "Всего заказов": stats.totalOrders,
+                "Общая выручка": stats.totalRevenue || '—',
+                "Стоимость товаров": stats.totalGoodsCost || '—',
+                "Стоимость доставки": stats.totalShippingCost || '—',
+                "Средний чек": stats.averageOrderValue?.toFixed(2) || '—'
+            }
+        };
+
+        if (req.query.format === 'pdf') {
+            const pdfBuffer = await generatePDF(reportData);
+            res.set({
+                'Content-Type': 'application/pdf',
+                'Content-Disposition': `attachment;`
+            });
+            res.send(Buffer.from(pdfBuffer));
+        } else {
+            const excelBuffer = await generateExcel(reportData);
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.send(excelBuffer);
+        }
+
+    } catch (error) {
+        console.error('Ошибка генерации отчёта:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+}
+
+// Маппинг колонок из таблицы для отчётности по товарам
+const COLUMN_MAPPING_DISH_SALES_REPORT = {
+    'Наименование': 'd.name as "Наименование"',
+    'Категория': 'c.name as "Категория"',
+    'Количество': 'SUM(co."quantityOrder") as "Количество"',
+    'Цена': 'AVG(co."pricePerUnit") as "Цена"',
+    'Сумма': 'SUM(co."quantityOrder" * co."pricePerUnit") as "Сумма"'
+};
+
+// Генерация отчёта по товарам (без пагинации)
+exports.generateDishSalesReport = async (req, res) => {
+
+}
