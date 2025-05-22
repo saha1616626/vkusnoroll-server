@@ -451,7 +451,7 @@ exports.getClientsPaginationFilters = async (req, res) => {
 
         const total = parseInt(countResult.rows[0].total); // Кол-во строк без LIMIT и OFFSET
 
-        res.json({total, data: dataResult?.rows});  // Успешно
+        res.json({ total, data: dataResult?.rows });  // Успешно
     } catch (error) {
         console.error('Ошибка при получении списка пользователей:', error);
         res.status(500).json({
@@ -529,32 +529,127 @@ exports.updateAccountBuyer = async (req, res) => {
 
 // Создание (регистрация) учетной записи клиента (пользовательская часть)
 exports.createAccountBuyer = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
 
-    // Получаем пользовательскую роль
-    const getUserRole = await pool.query(`SELECT id as role
-        FROM role
-        WHERE name = 'Пользователь'`);
+        const { email, password } = req.body;
 
-    let userRole; // Роль клиента
-    if (getUserRole.rows.length > 0) {
-        // Если роль существует, получаем её
-        userRole = getUserRole.rows[0];
-    } else {
-        // Если роль не найдена, создаем новую
-        const newUserRole = await pool.query(
-            `INSERT INTO role 
-             VALUES ('Пользователь')`
+        // Валидация входных данных
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Логин и пароль обязательны' });
+        }
+
+        // Проверка существования email
+        const emailCheck = await client.query(
+            `SELECT EXISTS(SELECT 1 FROM account WHERE email = $1) AS "emailExists"`,
+            [email]
         );
-        userRole = newUserRole.rows[0];
-    }
+        if (emailCheck.rows[0].emailExists) {
+            return res.status(400).json({ error: 'Email уже используется' });
+        }
 
-    const { rows: rows } = await pool.query(createAccountBuyerQuery,
-        [
+        // Получаем роль "Пользователь"
+        const getUserRole = await client.query(`
+            SELECT id FROM role WHERE name = 'Пользователь'
+        `);
+
+        let userRole; // Роль клиента
+        if (getUserRole.rows.length > 0) {
+            // Если роль существует, получаем её
+            userRole = getUserRole.rows[0];
+        } else {
+            // Если роль не найдена, создаем новую
+            const newUserRole = await client.query(
+                `INSERT INTO role (name) VALUES ('Пользователь') RETURNING id`
+            );
+            userRole = newUserRole.rows[0];
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10); // Хеширование пароля
+
+        const { rows } = await client.query(createAccountBuyerQuery, [
             userRole.id,
-            req.body.email,
-            req.body.password
-        ]
-    );
+            email,
+            hashedPassword, // Используем хешированный пароль
+            false,  // isAccountTermination (не заблокирован)
+            false,  // isEmailConfirmed (по умолчанию false)
+            false,  // isOrderManagementAvailable
+            false   // isMessageCenterAvailable
+        ]);
 
-    res.status(201).json(rows[0]);
+        await client.query('COMMIT'); // Фиксация изменений
+        res.status(201).json(rows[0]);
+    } catch (err) {
+        await client.query('ROLLBACK'); // Откат при ошибке
+        console.error('Ошибка регистрации:', err);
+        res.status(500).json({
+            error: err.message || 'Ошибка сервера при регистрации'
+        });
+    } finally {
+        client.release(); // Освобождение клиента
+    }
+};
+
+// Отправка кода подтверждения на Email. Подтверждение почты клиента
+exports.sendBuyerСonfirmationСodeEmail = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
+
+        // Генерация и установка кода
+        const code = generateConfirmationCode();
+        const updateResult = await client.query(installingEmailConfirmationCodeQuery,
+            [code, req.params.id]
+        );
+
+        // Получаем email из БД
+        const email = updateResult.rows[0]?.email;
+        if (!email) {
+            throw new Error('Аккаунт не найден');
+        }
+
+        // Отправка письма
+        const { success } = await mailService.sendConfirmationRegistration(email, code);
+        if (!success) {
+            throw new Error('Ошибка отправки письма');
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, dateTimeСodeCreation: updateResult.rows[0]?.dateTimeСodeCreation });
+    } catch (err) {
+        await client.query('ROLLBACK'); // Откат при ошибке
+        res.status(500).json({
+            error: err.message || 'Ошибка отправки кода'
+        });
+    } finally {
+        client.release(); // Освобождаем клиент
+    }
+};
+
+// Проверка кода подтверждения отправеленного на Email почту клиента
+exports.verifyBuyerСonfirmationСodeEmail = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { code } = req.body;
+
+        // Проверка типа кода
+        if (typeof code !== 'string') {
+            return res.status(400).json({ error: "Код должен быть строкой" });
+        }
+
+        // Выполнение запроса к БД
+        const { rows } = await pool.query(verificationConfirmationCodeQuery, [id, code]);
+
+        if (rows.length === 0) {
+            return res.status(400).json({
+                error: 'Неверный код или срок действия истек'
+            });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Ошибка верификации:", err);
+        res.status(500).json({ error: "Внутренняя ошибка сервера" });
+    }
 };

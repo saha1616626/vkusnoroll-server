@@ -27,6 +27,10 @@ exports.loginAdmin = async (req, res) => {
 
         const user = rows[0]; // первая строка
 
+        if (!user) {
+            return res.status(401).json({ error: 'Неверные учетные данные' });
+        }
+
         // Проверка пароля
         const isValidPassword = await bcrypt.compare(password, user.password);
         if (!isValidPassword) {
@@ -95,6 +99,10 @@ exports.loginManager = async (req, res) => {
 
         const user = rows[0]; // первая строка
 
+        if (!user) {
+            return res.status(401).json({ error: 'Неверные учетные данные' });
+        }
+
         // Проверка пароля
         const isValidPassword = await bcrypt.compare(password, user.password);
         if (!isValidPassword) {
@@ -107,12 +115,12 @@ exports.loginManager = async (req, res) => {
         }
 
         // Проверка блокировки учетной записи
-        if(user.isAccountTermination) {
+        if (user.isAccountTermination) {
             return res.status(403).json({ error: 'Учетная запись заблокирована' });
         }
 
         // Проверка подтверждения учетной записи
-        if(!user.isEmailConfirmed) {
+        if (!user.isEmailConfirmed) {
             return res.status(403).json({ error: 'Учетная запись не подтверждена, обращайтесь к администратору' });
         }
 
@@ -173,6 +181,10 @@ exports.loginUser = async (req, res) => {
 
         const user = rows[0]; // первая строка
 
+        if (!user) {
+            return res.status(401).json({ error: 'Неверные учетные данные' });
+        }
+
         // Проверка пароля
         const isValidPassword = await bcrypt.compare(password, user.password);
         if (!isValidPassword) {
@@ -182,6 +194,20 @@ exports.loginUser = async (req, res) => {
         // Проверка роли
         if (user.role !== 'Пользователь') {
             return res.status(403).json({ error: 'Доступ запрещен' });
+        }
+
+        // Проверка блокировки учетной записи
+        if (user.isAccountTermination) {
+            return res.status(403).json({ error: 'Учетная запись заблокирована' });
+        }
+
+        // Проверка подтверждения email
+        if (!user.isEmailConfirmed) {
+            return res.status(403).json({
+                error: 'Требуется подтверждение Email',
+                needsConfirmation: true,
+                userId: user.id // Id пользователя
+            });
         }
 
         // Генерация токена. JWT_SECRET - секретный ключ для подписи токена

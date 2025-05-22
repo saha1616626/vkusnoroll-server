@@ -12,6 +12,8 @@ router.put('/user/:id', accountsController.updateEmail);
 // Маршруты для клиента (пользовательская часть)
 router.patch('/buyer/:id', authMiddleware, accountsController.updateAccountBuyer); // Обновление данных в личном кабинете
 router.post('/buyer', accountsController.createAccountBuyer); // Регистрация аккаунта
+router.post('/buyer/:id/send-code', accountsController.sendBuyerСonfirmationСodeEmail); // Отправка кода подтверждения на Email
+router.post('/buyer/:id/verify-code', accountsController.verifyBuyerСonfirmationСodeEmail); // Проверка кода подтверждения
 
 // Маршруты для сотрудников (админ часть)
 router.get('/employees', accountsController.getEmployees);

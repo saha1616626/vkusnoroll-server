@@ -99,14 +99,18 @@ exports.updateAccountBuyerQuery = `
 
 // Создание (регистрация) учетной записи клиента (пользовательская часть)
 exports.createAccountBuyerQuery = `
-INSERT INTO account (
-  "roleId",
-  email,
-  password,
-  "registrationDate",
-  "isAccountTermination")
-VALUES ($1, $2, $3, NOW(), false)
-RETURNING *
+  INSERT INTO account (
+    "roleId",
+    email,
+    password,
+    "registrationDate",
+    "isAccountTermination",
+    "isEmailConfirmed",
+    "isOrderManagementAvailable", 
+    "isMessageCenterAvailable"
+  )
+  VALUES ($1, $2, $3, NOW(), $4, $5, $6, $7)
+  RETURNING *
 `;
 
 // Поверка уникальности Email во всей системе

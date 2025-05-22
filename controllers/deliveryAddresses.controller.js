@@ -37,6 +37,23 @@ exports.getDeliveryAddressById = async (req, res) => {
     }
 }
 
+// Получаем первый доступный сохраненный адрес клиента
+exports.getFirstAvailableSavedClientAddress = async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT *
+            FROM "deliveryAddress"
+            WHERE "accountId" = $1
+            ORDER BY id desc
+			LIMIT 1`,
+            [req.params.id]);
+
+        res.json(rows); // Успешно
+    } catch(err) {
+        res.status(500).json({ error: 'Ошибка загрузки адреса доставки' });
+    }
+}
+
 // Создать адрес доставки клиента
 exports.createDeliveryAddress = async (req, res) => {
     try {

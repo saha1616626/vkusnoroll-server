@@ -5,6 +5,8 @@ const router = express.Router();
 const deliveryAddressesController = require('../controllers/deliveryAddresses.controller'); // Контроллер для работы с адресами доставки
 const authMiddleware = require('../middleware/auth.middleware'); // Проверка авторизации пользователя
 
+router.get('/address/buyer/:id', authMiddleware, deliveryAddressesController.getFirstAvailableSavedClientAddress); // Получаем первый доступный сохраненный адрес клиента
+
 router.get('/address/:id', authMiddleware, deliveryAddressesController.getDeliveryAddressById); // Получить адрес по id
 router.get('/:id', authMiddleware, deliveryAddressesController.getDeliveryAddressesByIdClient); // Получить список адресов клиента
 router.post('/', authMiddleware, deliveryAddressesController.createDeliveryAddress), // Создать адрес доставки клиента
