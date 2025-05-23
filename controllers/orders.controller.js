@@ -734,29 +734,42 @@ exports.deleteOrders = async (req, res) => {
             return res.status(400).json({ error: 'Некорректные параметры запроса' });
         }
 
-        // Массовое удаление заказов
-        const deleteQuery = `
-            DELETE FROM "order" 
+        // Удаляем заказы и получаем их deliveryAddressId
+        const deleteOrderQuery = `
+            DELETE FROM "order"
             WHERE id = ANY($1::integer[])
-            RETURNING id
+            RETURNING id, "deliveryAddressId"
         `;
+        const deleteOrderResult = await client.query(deleteOrderQuery, [orderIds]);
 
-        const deleteResult = await client.query(deleteQuery, [orderIds]);
+        // Собираем уникальные идентификаторы адресов
+        const addressIds = deleteOrderResult.rows.map(row => row.deliveryAddressId);
+        const uniqueAddressIds = [...new Set(addressIds)];
 
-        // Проверяем количество удаленных записей
-        if (deleteResult.rowCount !== orderIds.length) {
-            const deletedIds = deleteResult.rows.map(r => r.id);
+        // Удаляем связанные адреса, если они есть
+        if (uniqueAddressIds.length > 0) {
+            await client.query(`
+                DELETE FROM "deliveryAddress"
+                WHERE id = ANY($1::integer[])
+            `, [uniqueAddressIds]);
+        }
+
+        // Проверяем, все ли заказы удалены
+        if (deleteOrderResult.rowCount !== orderIds.length) {
+            const deletedIds = deleteOrderResult.rows.map(r => r.id);
             const missingIds = orderIds.filter(id => !deletedIds.includes(parseInt(id)));
-            console.warn('Не найдены заказы для удаления:', missingIds);
+            console.warn('Не найдены заказы:', missingIds);
         }
 
         await client.query('COMMIT');
 
+        await client.query('COMMIT');
         res.json({
             success: true,
-            deleted: deleteResult.rowCount,
-            warnings: deleteResult.rowCount !== orderIds.length
-                ? `Некоторые заказы не найдены`
+            deletedOrders: deleteOrderResult.rowCount,
+            deletedAddresses: uniqueAddressIds.length,
+            warnings: deleteOrderResult.rowCount !== orderIds.length
+                ? 'Некоторые заказы не найдены'
                 : null
         });
 
@@ -1481,7 +1494,7 @@ exports.generateOrdersReport = async (req, res) => {
             stats: {
                 "Всего заказов": parseInt(stats.totalOrders || '0'),
                 "Общая выручка": parseFloat(stats.totalRevenue?.toFixed(2) || '0'),
-                "Стоимость товаров": parseFloat(stats.totalGoodsCost?.toFixed(2)|| '0'),
+                "Стоимость товаров": parseFloat(stats.totalGoodsCost?.toFixed(2) || '0'),
                 "Стоимость доставки": parseFloat(stats.totalShippingCost?.toFixed(2) || '0'),
                 "Средний чек": parseFloat(stats.averageOrderValue?.toFixed(2) || '0')
             }
