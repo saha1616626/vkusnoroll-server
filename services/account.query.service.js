@@ -153,7 +153,7 @@ RETURNING *
 `;
 
 // Количество незавершенных чатов у выбранного пользователя
-exports.checkUserActiveСhatsQuery = `
+exports.checkUserActiveChatsQuery = `
 SELECT COUNT(*) as "activeChats" 
   FROM chat 
   WHERE "accountId" = $1 AND "isChatOver" = false
