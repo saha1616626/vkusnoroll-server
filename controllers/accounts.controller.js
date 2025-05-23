@@ -14,7 +14,7 @@ const {
     checkLoginForUniqueQuery,
     installingEmailConfirmationCodeQuery,
     verificationConfirmationCodeQuery,
-    checkUserActiveСhatsQuery,
+    checkUserActiveChatsQuery,
     updatingChatsAfterAccountDeletion,
     updateEmployeQuery,
     updateClientQuery
@@ -229,7 +229,7 @@ exports.updateEmploye = async (req, res) => {
 // Количество незавершенных чатов у выбранного пользователя
 exports.checkActiveChats = async (req, res) => {
     try {
-        const { rows } = await pool.query(checkUserActiveСhatsQuery,
+        const { rows } = await pool.query(checkUserActiveChatsQuery,
             [req.params.id]
         );
 
@@ -246,7 +246,7 @@ exports.deleteEmploye = async (req, res) => {
         await client.query('BEGIN'); // Начало транзакции
 
         // Проверка активных чатов
-        const { rows: chatRows } = await client.query(checkUserActiveСhatsQuery,
+        const { rows: chatRows } = await client.query(checkUserActiveChatsQuery,
             [req.params.id]
         );
 
@@ -278,7 +278,7 @@ exports.deleteEmploye = async (req, res) => {
 };
 
 // Отправка кода подтверждения на Email. Подтверждение почты сотрудника
-exports.sendEmployeeСonfirmationСodeEmail = async (req, res) => {
+exports.sendEmployeeConfirmationCodeEmail = async (req, res) => {
     const client = await pool.connect(); // Получаем клиент из пула
     try {
         await client.query('BEGIN'); // Начало транзакции
@@ -314,7 +314,7 @@ exports.sendEmployeeСonfirmationСodeEmail = async (req, res) => {
 };
 
 // Проверка кода подтверждения отправеленного на Email почты сотрудника
-exports.verifyEmployeeСonfirmationСodeEmail = async (req, res) => {
+exports.verifyEmployeeConfirmationCodeEmail = async (req, res) => {
     try {
         const { id } = req.params;
         const { code } = req.body;
@@ -592,7 +592,7 @@ exports.createAccountBuyer = async (req, res) => {
 };
 
 // Отправка кода подтверждения на Email. Подтверждение почты клиента
-exports.sendBuyerСonfirmationСodeEmail = async (req, res) => {
+exports.sendBuyerConfirmationCodeEmail = async (req, res) => {
     const client = await pool.connect(); // Получаем клиент из пула
     try {
         await client.query('BEGIN'); // Начало транзакции
@@ -628,7 +628,7 @@ exports.sendBuyerСonfirmationСodeEmail = async (req, res) => {
 };
 
 // Проверка кода подтверждения отправеленного на Email почту клиента
-exports.verifyBuyerСonfirmationСodeEmail = async (req, res) => {
+exports.verifyBuyerConfirmationCodeEmail = async (req, res) => {
     try {
         const { id } = req.params;
         const { code } = req.body;
@@ -653,3 +653,149 @@ exports.verifyBuyerСonfirmationСodeEmail = async (req, res) => {
         res.status(500).json({ error: "Внутренняя ошибка сервера" });
     }
 };
+
+// Отправка кода подтверждения для восстановления пароля к учетной записи
+exports.sendCodeBuyerRecoveryPassword = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
+
+        const { email } = req.body;
+
+        // Ищем пользователя по email
+        const userCheck = await client.query(
+            `SELECT *, a.id as "userId"
+            FROM account a
+            JOIN role r ON a."roleId" = r.id
+            WHERE
+                r.name = 'Пользователь'
+                AND a.email = $1`,
+            [email]
+        );
+
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Пользователь с таким Email не найден' });
+        }
+
+        // Проверка подтверждения email
+        if (!userCheck.rows[0].isEmailConfirmed) {
+            return res.status(403).json({
+                error: 'Требуется подтверждение Email',
+                needsConfirmation: true,
+                userId: userCheck.rows[0].userId // Id пользователя
+            });
+        }
+
+        // Проверка, что код отправлен более минуты назад
+        if (userCheck.rows[0].dateTimeСodeCreation) {
+            const serverTime = new Date(userCheck.rows[0].dateTimeСodeCreation).getTime();
+
+            // Рассчитываем оставшееся время до возможности запроса нового кода для подтверждения Email
+            const now = Date.now();
+            const timeDiff = now - serverTime;
+            const remaining = Math.ceil((60 * 1000 - timeDiff) / 1000);
+
+            if (remaining > 0) {
+                return res.status(403).json({
+                    error: 'Последний код был отправлен менее минуты назад. Подождите, чтобы запросить его снова',
+                    dateTimeСodeCreation: userCheck.rows[0].dateTimeСodeCreation,
+                    userId: userCheck.rows[0].userId // Id пользователя
+                });
+            }
+        }
+
+        const userId = userCheck.rows[0].userId;
+
+        // Генерация и установка кода
+        const code = generateConfirmationCode();
+        const updateResult = await client.query(installingEmailConfirmationCodeQuery,
+            [code, userId]
+        );
+
+        // Отправка письма
+        const { success } = await mailService.sendCodeBuyerRecoveryPassword(email, code);
+        if (!success) {
+            throw new Error('Ошибка отправки письма');
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, dateTimeСodeCreation: updateResult.rows[0]?.dateTimeСodeCreation, userId: userCheck.rows[0].userId });
+    } catch (err) {
+        await client.query('ROLLBACK'); // Откат при ошибке
+        console.error('Ошибка восстановления пароля:', err);
+        res.status(500).json({
+            error: err.message || 'Ошибка отправки кода восстановления'
+        });
+    } finally {
+        client.release(); // Освобождаем клиент
+    }
+}
+
+// Проверка кода подтверждения, отправленного на email при восстановлении пароля
+exports.checkingCodeResettingPassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { code } = req.body;
+
+        // Валидация формата кода (только цифры)
+        if (!/^\d{6}$/.test(code)) {
+            return res.status(400).json({ error: "Неверный формат кода" });
+        }
+
+        // Выполнение запроса к БД
+        const result = await pool.query(`
+            SELECT *
+            FROM account 
+            WHERE id = $1 
+            AND "confirmationСode" = $2 
+            AND "dateTimeСodeCreation" > NOW() - INTERVAL '1 hours'`,
+            [id, code]);
+
+        if (result.rowCount === 0) {
+            // Защита от временных атак - фиксированное время ответа
+            await new Promise(resolve => setTimeout(resolve, 500));
+            return res.status(400).json({
+                error: "Неверный код или срок действия истек"
+            });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Ошибка верификации:", err);
+        res.status(500).json({ error: "Внутренняя ошибка сервера" });
+    }
+};
+
+// Смена пароля
+exports.changingPassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+
+        // Валидация
+        if (!password || password.length < 8) {
+            return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10); // Хеширование пароля
+
+        // Выполнение запроса к БД
+        const result = await pool.query(`
+            UPDATE account 
+            SET password = $1,
+                "confirmationСode" = NULL,
+                "dateTimeСodeCreation" = NULL 
+            WHERE id = $2
+            RETURNING id`,
+            [hashedPassword, id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: 'Пользователь не найден' });
+        }
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Ошибка смены пароля:", err);
+        res.status(500).json({ error: "Внутренняя ошибка сервера" });
+    }
+}
