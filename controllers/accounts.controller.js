@@ -832,7 +832,7 @@ exports.sendCodeAdministratorRecoveryPassword = async (req, res) => {
         // Проверка подтверждения email
         if (!userCheck.rows[0].isEmailConfirmed) {
             return res.status(403).json({
-                error: 'Учетная запись не подтверждена, обращайтесь к администратору',
+                error: 'Требуется подтверждение Email',
             });
         }
 
