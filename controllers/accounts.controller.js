@@ -654,7 +654,7 @@ exports.verifyBuyerConfirmationCodeEmail = async (req, res) => {
     }
 };
 
-// Отправка кода подтверждения для восстановления пароля к учетной записи
+// Отправка кода подтверждения для восстановления пароля к учетной записи клиента
 exports.sendCodeBuyerRecoveryPassword = async (req, res) => {
     const client = await pool.connect(); // Получаем клиент из пула
     try {
@@ -683,6 +683,156 @@ exports.sendCodeBuyerRecoveryPassword = async (req, res) => {
                 error: 'Требуется подтверждение Email',
                 needsConfirmation: true,
                 userId: userCheck.rows[0].userId // Id пользователя
+            });
+        }
+
+        // Проверка, что код отправлен более минуты назад
+        if (userCheck.rows[0].dateTimeСodeCreation) {
+            const serverTime = new Date(userCheck.rows[0].dateTimeСodeCreation).getTime();
+
+            // Рассчитываем оставшееся время до возможности запроса нового кода для подтверждения Email
+            const now = Date.now();
+            const timeDiff = now - serverTime;
+            const remaining = Math.ceil((60 * 1000 - timeDiff) / 1000);
+
+            if (remaining > 0) {
+                return res.status(403).json({
+                    error: 'Последний код был отправлен менее минуты назад. Подождите, чтобы запросить его снова',
+                    dateTimeСodeCreation: userCheck.rows[0].dateTimeСodeCreation,
+                    userId: userCheck.rows[0].userId // Id пользователя
+                });
+            }
+        }
+
+        const userId = userCheck.rows[0].userId;
+
+        // Генерация и установка кода
+        const code = generateConfirmationCode();
+        const updateResult = await client.query(installingEmailConfirmationCodeQuery,
+            [code, userId]
+        );
+
+        // Отправка письма
+        const { success } = await mailService.sendCodeBuyerRecoveryPassword(email, code);
+        if (!success) {
+            throw new Error('Ошибка отправки письма');
+        }
+
+        await client.query('COMMIT');
+        res.json({ success: true, dateTimeСodeCreation: updateResult.rows[0]?.dateTimeСodeCreation, userId: userCheck.rows[0].userId });
+    } catch (err) {
+        await client.query('ROLLBACK'); // Откат при ошибке
+        console.error('Ошибка восстановления пароля:', err);
+        res.status(500).json({
+            error: err.message || 'Ошибка отправки кода восстановления'
+        });
+    } finally {
+        client.release(); // Освобождаем клиент
+    }
+}
+
+// Отправка кода подтверждения для восстановления пароля к учетной записи менеджера
+exports.sendCodeManagerRecoveryPassword = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
+
+        const { email } = req.body;
+
+        // Ищем пользователя по email
+        const userCheck = await client.query(
+            `SELECT *, a.id as "userId"
+            FROM account a
+            JOIN role r ON a."roleId" = r.id
+            WHERE
+                r.name = 'Менеджер'
+                AND a.email = $1`,
+            [email]
+        );
+
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Пользователь с таким Email не найден' });
+        }
+
+        // Проверка подтверждения email
+        if (!userCheck.rows[0].isEmailConfirmed) {
+            return res.status(403).json({
+                error: 'Учетная запись не подтверждена, обращайтесь к администратору',
+            });
+        }
+
+        // Проверка, что код отправлен более минуты назад
+        if (userCheck.rows[0].dateTimeСodeCreation) {
+            const serverTime = new Date(userCheck.rows[0].dateTimeСodeCreation).getTime();
+
+            // Рассчитываем оставшееся время до возможности запроса нового кода для подтверждения Email
+            const now = Date.now();
+            const timeDiff = now - serverTime;
+            const remaining = Math.ceil((60 * 1000 - timeDiff) / 1000);
+
+            if (remaining > 0) {
+                return res.status(403).json({
+                    error: 'Последний код был отправлен менее минуты назад. Подождите, чтобы запросить его снова',
+                    dateTimeСodeCreation: userCheck.rows[0].dateTimeСodeCreation,
+                    userId: userCheck.rows[0].userId // Id пользователя
+                });
+            }
+        }
+
+        const userId = userCheck.rows[0].userId;
+
+        // Генерация и установка кода
+        const code = generateConfirmationCode();
+        const updateResult = await client.query(installingEmailConfirmationCodeQuery,
+            [code, userId]
+        );
+
+        // Отправка письма
+        // const { success } = await mailService.sendCodeBuyerRecoveryPassword(email, code);
+        // if (!success) {
+        //     throw new Error('Ошибка отправки письма');
+        // }
+
+        await client.query('COMMIT');
+        res.json({ success: true, dateTimeСodeCreation: updateResult.rows[0]?.dateTimeСodeCreation, userId: userCheck.rows[0].userId });
+    } catch (err) {
+        await client.query('ROLLBACK'); // Откат при ошибке
+        console.error('Ошибка восстановления пароля:', err);
+        res.status(500).json({
+            error: err.message || 'Ошибка отправки кода восстановления'
+        });
+    } finally {
+        client.release(); // Освобождаем клиент
+    }
+}
+
+// Отправка кода подтверждения для восстановления пароля к учетной записи администратора
+exports.sendCodeAdministratorRecoveryPassword = async (req, res) => {
+    const client = await pool.connect(); // Получаем клиент из пула
+    try {
+        await client.query('BEGIN'); // Начало транзакции
+
+        const { email } = req.body;
+
+        // Ищем пользователя по email
+        const userCheck = await client.query(
+            `SELECT *, a.id as "userId"
+            FROM account a
+            JOIN role r ON a."roleId" = r.id
+            WHERE
+                r.name = 'Администратор'
+                AND a.email = $1`,
+            [email]
+        );
+
+        if (userCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Пользователь с таким Email не найден' });
+        }
+
+        // Проверка подтверждения email
+        if (!userCheck.rows[0].isEmailConfirmed) {
+            return res.status(403).json({
+                error: 'Учетная запись не подтверждена, обращайтесь к администратору',
             });
         }
 

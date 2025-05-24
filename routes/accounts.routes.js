@@ -27,13 +27,16 @@ router.get('/employees/:id/active-chats', accountsController.checkActiveChats); 
 router.delete('/employees/:id', accountsController.deleteEmploye); // Удаление сотрудника
 router.put('/employees/:id', accountsController.updateEmploye);
 
-
 // Маршруты для пользователей (админ часть)
 router.get('/clients/filters', accountsController.getClientsPaginationFilters); // Получение списка пользователей с пагинацией и фильтрами
 router.get('/clients', accountsController.getClients);
 router.put('/clients/:id', accountsController.updateClient);
 router.delete('/clients/:id', accountsController.deleteClient);
 
-// TODO добавить запросы в отдельный файл (новые и старые из контроллера)
+// Маршруты для менеджеров
+router.post('/manager/send-code-recovery', accountsController.sendCodeManagerRecoveryPassword); // Отправка кода восстановления пароля
+
+// Маршруты для администратора
+router.post('/administrator/send-code-recovery', accountsController.sendCodeAdministratorRecoveryPassword); // Отправка кода восстановления пароля
 
 module.exports = router;
