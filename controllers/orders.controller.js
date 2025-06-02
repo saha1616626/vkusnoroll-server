@@ -1363,10 +1363,21 @@ exports.generateOrdersReport = async (req, res) => {
             queryParams.push(new Date(date.end));
         }
 
+        // Форматирование времени
+        function formatDate(date) {
+            if (!date) return '—';
+            const d = new Date(date);
+            return `${String(d.getDate()).padStart(2, '0')}.` +
+                `${String(d.getMonth() + 1).padStart(2, '0')}.` +
+                `${d.getFullYear()} ` +
+                `${String(d.getHours()).padStart(2, '0')}:` +
+                `${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+
         // Период
         if (date?.start || date?.end) {
-            const start = date.start ? new Date(date.start).toLocaleDateString('ru-RU') : '—';
-            const end = date.end ? new Date(date.end).toLocaleDateString('ru-RU') : '—';
+            const start = formatDate(date.start);
+            const end = formatDate(date.end);
             appliedFilters['Период оформления'] = `с ${start} по ${end}`;
         }
 
@@ -1576,11 +1587,22 @@ exports.generateDishSalesReport = async (req, res) => {
             queryParams.push(new Date(date.end));
         }
 
+        // Форматирование времени
+        function formatDate(date) {
+            if (!date) return '—';
+            const d = new Date(date);
+            return `${String(d.getDate()).padStart(2, '0')}.` +
+                `${String(d.getMonth() + 1).padStart(2, '0')}.` +
+                `${d.getFullYear()} ` +
+                `${String(d.getHours()).padStart(2, '0')}:` +
+                `${String(d.getMinutes()).padStart(2, '0')}`;
+        }
+
         // Период
         if (date?.start || date?.end) {
-            const start = date.start ? new Date(date.start).toLocaleDateString('ru-RU') : '—';
-            const end = date.end ? new Date(date.end).toLocaleDateString('ru-RU') : '—';
-            appliedFilters['Период'] = `с ${start} по ${end}`;
+            const start = formatDate(date.start);
+            const end = formatDate(date.end);
+            appliedFilters['Период оформления'] = `с ${start} по ${end}`;
         }
 
         // Фильтрация по категориям
